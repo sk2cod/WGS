@@ -1,12 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // @vercel/og ships a compiled native module that Vercel's serverless file
-  // tracer sometimes fails to include in the deployed bundle (surfaces in
-  // production as "Cannot find module .../compiled/@vercel/og/index.node.js").
-  // Marking it external skips bundling/tracing and resolves it from
-  // node_modules at runtime instead, where it's actually present.
-  serverExternalPackages: ["@vercel/og"],
+  // Next's internal og/image-response module dynamically requires its own
+  // compiled @vercel/og binary (next/dist/compiled/@vercel/og/index.node.js);
+  // the file exists locally but Vercel's serverless file tracer misses it
+  // since it's a dynamic, not statically-analyzable, require. Surfaces in
+  // production as "Cannot find module .../compiled/@vercel/og/index.node.js"
+  // on every /api/render call. Force it into the traced bundle explicitly.
+  outputFileTracingIncludes: {
+    "/api/render": ["./node_modules/next/dist/compiled/@vercel/og/**"],
+  },
 };
 
 export default nextConfig;
