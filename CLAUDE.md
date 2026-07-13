@@ -16,7 +16,7 @@ AI-assisted Instagram carousel/post generator for a single creator brand (WGS). 
 - ✅ Phase 3 (Generation) — complete, verified PASS
 - ✅ Phase 4 (Surfaces) — complete, verified PASS
 - ✅ Phase 5 (Mobile flow) — complete, verified PASS
-- ⬜ Phase 6 (Deployment)
+- ✅ Phase 6 (Deployment) — complete, verified PASS. Live at https://wgs-studio.vercel.app (backend: https://wgs-backend-production.up.railway.app). Also added beyond the original Phase 6 spec: a Supabase-Auth login screen gating the whole app, and RLS policies locking brand_kit/memory/image_cache to the authenticated role.
 
 *(Update this section at the end of every phase — check off the completed one and move the ⏳ marker to the next.)*
 
