@@ -41,6 +41,26 @@ def _cache_key(keyword: str, shadow_hex: str, highlight_hex: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _cache_path(keyword: str, shadow_hex: str, highlight_hex: str) -> Path:
+    return CACHE_DIR / f"{_cache_key(keyword, shadow_hex, highlight_hex)}.png"
+
+
+def get_cached_hero(keyword: str, shadow_hex: str, highlight_hex: str) -> bytes | None:
+    """Look up a previously duotoned hero by keyword + palette, without generating
+    anything. Reshuffling within the same keyword+mood is then free (Section 9)."""
+    path = _cache_path(keyword, shadow_hex, highlight_hex)
+    return path.read_bytes() if path.exists() else None
+
+
+def duotone_and_cache(image: bytes, keyword: str, shadow_hex: str, highlight_hex: str) -> bytes:
+    """Duotone a freshly generated hero and cache it by keyword + palette, so the next
+    post reusing this keyword+mood skips image generation entirely."""
+    duotoned = apply_duotone(image, shadow_hex, highlight_hex)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _cache_path(keyword, shadow_hex, highlight_hex).write_bytes(duotoned)
+    return duotoned
+
+
 def generate_placeholder_hero(
     keyword: str,
     shadow_hex: str,

@@ -1,0 +1,74 @@
+"""Validation (Python, against the brief) — blueprint Section 8. Deterministic checks
+only, no LLM: brand-voice/forbidden phrasings, citation presence when required, format
+constraints (slide count, word limits), and repetition against content memory. Semantic
+checks (does this *feel* preachy, does copy drift beyond a cited article) are the
+critique pass's job upstream, not this validator's."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+from app.engine.generator import slide_text
+from app.models.brand_kit import BrandKit
+from app.models.brief import ContentBrief
+from app.models.memory import MemoryRecord
+from app.models.post import GeneratedPost
+
+
+class ValidationResult(BaseModel):
+    passed: bool
+    errors: list[str] = []
+
+
+def _check_forbidden(brand_kit: BrandKit, post: GeneratedPost) -> list[str]:
+    text = " ".join([slide_text(s) for s in post.slides] + [post.caption]).lower()
+    errors = []
+    for term in brand_kit.forbidden:
+        # entries like "engagement-bait CTAs (e.g. 'comment ❤️ if...')" carry a
+        # parenthetical example — match on the literal phrase before it.
+        needle = term.split(" (")[0].strip().lower()
+        if needle and needle in text:
+            errors.append(f"forbidden phrase present: {term!r}")
+    return errors
+
+
+def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
+    errors = []
+    if len(post.slides) != brief.slide_count:
+        errors.append(f"expected {brief.slide_count} slide(s), got {len(post.slides)}")
+    for i, slide in enumerate(post.slides, start=1):
+        word_count = len(slide_text(slide).split())
+        if word_count > brief.max_words_per_slide:
+            errors.append(
+                f"slide {i} has {word_count} words, exceeds max_words_per_slide "
+                f"({brief.max_words_per_slide})"
+            )
+    return errors
+
+
+def _check_citation(brief: ContentBrief) -> list[str]:
+    if brief.requires_citation and not brief.sources:
+        return ["requires_citation is True but the brief has no sources"]
+    return []
+
+
+def _check_repetition(memory: list[MemoryRecord], fingerprint: str) -> list[str]:
+    if any(r.fingerprint == fingerprint for r in memory):
+        return [f"fingerprint {fingerprint!r} already exists in content memory"]
+    return []
+
+
+def validate_post(
+    brief: ContentBrief,
+    brand_kit: BrandKit,
+    post: GeneratedPost,
+    memory: list[MemoryRecord],
+    fingerprint: str,
+) -> ValidationResult:
+    errors = [
+        *_check_forbidden(brand_kit, post),
+        *_check_format(brief, post),
+        *_check_citation(brief),
+        *_check_repetition(memory, fingerprint),
+    ]
+    return ValidationResult(passed=not errors, errors=errors)

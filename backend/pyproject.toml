@@ -4,13 +4,20 @@ version = "0.1.0"
 description = "AI Content Studio backend (FastAPI, Railway)"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.116.0",
+    "fastapi>=0.139.0",
+    "openai>=2.45.0",
     "pillow>=10.4.0",
     "pydantic>=2.7.0",
+    "pydantic-settings>=2.14.2",
     "pyyaml>=6.0.1",
+    "trafilatura>=2.1.0",
+    "uvicorn>=0.51.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.3.0",
 ]
 
