@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     llm_model_strong: str = "claude-sonnet-5"
     image_model: str = "gpt-image-2"
 
+    # --- Supabase ---
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_db_url: str = ""
+
     # --- Cost / quality flags ---
     image_quality: str = "medium"        # medium | low
     image_size: str = "1024x1536"        # portrait
