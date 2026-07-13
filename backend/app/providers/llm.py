@@ -43,6 +43,11 @@ class LLMProvider:
             system=[system_block],
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
+            # These calls only ever want the final structured/prose output, never a
+            # reasoning trace — and left unset, claude-sonnet-5 defaults extended
+            # thinking on with an uncontrolled budget that can consume the entire
+            # max_tokens, leaving zero tokens for the actual response.
+            thinking={"type": "disabled"},
         )
         return "".join(
             block.text for block in response.content if block.type == "text"
