@@ -13,7 +13,7 @@ from app.engine.memory import MemoryStore
 from app.models.enums import Format
 from app.providers.llm import LLMProvider
 from app.sources.paste_link import PasteLinkError, build_paste_link_brief, extract_source
-from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
+from app.taxonomy.wgs_brand_kit import get_brand_kit
 
 router = APIRouter()
 
@@ -32,5 +32,5 @@ async def paste_link(request: PasteLinkRequest) -> BriefResult:
 
     memory = MemoryStore().load()
     return await asyncio.to_thread(
-        build_paste_link_brief, source, WGS_BRAND_KIT, memory, LLMProvider(), format=request.format
+        build_paste_link_brief, source, get_brand_kit(), memory, LLMProvider(), format=request.format
     )

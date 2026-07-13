@@ -12,6 +12,7 @@ import app.routes.picks as picks_module
 from app.engine.memory import MemoryStore
 from app.engine.selector import PicksStore
 from app.main import app
+from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 ANGLE_JSON = json.dumps({"angle": "a specific angle", "mood": "wisdom"})
 PITCH_JSON = json.dumps({"hook": "a hook", "thumbnail_concept": "a concept"})
@@ -29,6 +30,7 @@ def _patch_stores(monkeypatch, tmp_path, llm_factory):
     monkeypatch.setattr(picks_module, "LLMProvider", llm_factory)
     monkeypatch.setattr(picks_module, "PicksStore", lambda: PicksStore(path=tmp_path / "picks.json"))
     monkeypatch.setattr(picks_module, "MemoryStore", lambda: MemoryStore(path=tmp_path / "memory.json"))
+    monkeypatch.setattr(picks_module, "get_brand_kit", lambda: WGS_BRAND_KIT)
 
 
 def test_get_picks_returns_three_picks_end_to_end(tmp_path, monkeypatch):

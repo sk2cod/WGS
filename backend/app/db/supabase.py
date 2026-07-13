@@ -1,9 +1,9 @@
 """Supabase client + queries (Section 9 of implementation-guide.md).
 
-Thin wrapper around the `supabase-py` client. Not yet wired into `engine/memory.py`
-or `providers/duotone.py` as their backing store — those stay file-backed until a
-later phase swaps them in behind the same interface. This module exists so the
-tables/bucket created by `schema.sql` have a typed access point ready to use.
+Thin wrapper around the `supabase-py` client. Backs `engine/memory.py` and
+`taxonomy/wgs_brand_kit.get_brand_kit()` in production. `providers/duotone.py`'s hero
+cache stays file-backed for now — the image_cache table/functions here exist for when
+that gets wired in too.
 """
 
 from __future__ import annotations

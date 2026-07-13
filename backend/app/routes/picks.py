@@ -19,7 +19,7 @@ from app.engine.selector import (
 )
 from app.providers.llm import LLMProvider
 from app.taxonomy.loader import get_topics
-from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
+from app.taxonomy.wgs_brand_kit import get_brand_kit
 
 router = APIRouter()
 
@@ -33,7 +33,7 @@ def get_picks() -> DailyPicksResult:
     return get_or_compute_daily_picks(
         topics=list(get_topics()),
         memory=MemoryStore().load(),
-        brand_kit=WGS_BRAND_KIT,
+        brand_kit=get_brand_kit(),
         llm=LLMProvider(),
         store=PicksStore(),
         target_date=date.today(),
@@ -46,7 +46,7 @@ def reroll(request: RerollRequest) -> DailyPicksResult:
         return reroll_pick(
             topics=list(get_topics()),
             memory=MemoryStore().load(),
-            brand_kit=WGS_BRAND_KIT,
+            brand_kit=get_brand_kit(),
             llm=LLMProvider(),
             store=PicksStore(),
             target_date=date.today(),

@@ -10,6 +10,7 @@ import app.routes.sources as sources_module
 import app.sources.paste_link as paste_link_module
 from app.engine.memory import MemoryStore
 from app.main import app
+from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 
 class _FakeLLM:
@@ -20,6 +21,7 @@ class _FakeLLM:
 def _patch_dependencies(monkeypatch, tmp_path):
     monkeypatch.setattr(sources_module, "MemoryStore", lambda: MemoryStore(path=tmp_path / "memory.json"))
     monkeypatch.setattr(sources_module, "LLMProvider", _FakeLLM)
+    monkeypatch.setattr(sources_module, "get_brand_kit", lambda: WGS_BRAND_KIT)
 
 
 def test_paste_link_route_returns_attributed_brief(tmp_path, monkeypatch):

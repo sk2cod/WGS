@@ -15,6 +15,7 @@ import app.routes.generate as generate_module
 from app.config import Settings
 from app.engine.memory import MemoryStore
 from app.main import app
+from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 _ANGLE_JSON = json.dumps({"angle": "a specific test angle", "mood": "wisdom"})
 _DRAFT_CAROUSEL_JSON = json.dumps(
@@ -64,6 +65,7 @@ class _FakeImage:
 def _isolated_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(duotone_module, "CACHE_DIR", tmp_path / "heroes")
     monkeypatch.setattr(generate_module, "MemoryStore", lambda: MemoryStore(path=tmp_path / "memory.json"))
+    monkeypatch.setattr(generate_module, "get_brand_kit", lambda: WGS_BRAND_KIT)
     # the real .env sets ENABLE_CRITIQUE=true; force it off so canned LLM responses
     # (angle + draft, no critique/refine) are the only calls each test needs to queue
     monkeypatch.setattr(

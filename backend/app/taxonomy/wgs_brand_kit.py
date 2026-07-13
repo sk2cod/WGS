@@ -1,7 +1,10 @@
+from app.db import supabase as db
 from app.models.brand_kit import BrandKit
 
 # Locked WGS values — Section 6 of implementation-guide.md / Section 4 of the blueprint.
-# Mirrors frontend/lib/wgs-brand-kit.ts; this is the Phase 1 test fixture / first real row.
+# Mirrors frontend/lib/wgs-brand-kit.ts. Also doubles as the seed row: get_brand_kit()
+# upserts this into Supabase the first time the table is empty, so production reads
+# come from the database from then on without a separate migration/seed script.
 WGS_BRAND_KIT = BrandKit.model_validate(
     {
         "brand_name": "Women's Growth Society",
@@ -56,3 +59,13 @@ WGS_BRAND_KIT = BrandKit.model_validate(
         "signature_cta": "Follow us for daily reminders that help you grow.",
     }
 )
+
+
+def get_brand_kit() -> BrandKit:
+    """Production accessor: reads the one brand_kit row from Supabase, seeding it from
+    WGS_BRAND_KIT on first call if the table is still empty."""
+    existing = db.fetch_brand_kit()
+    if existing is not None:
+        return existing
+    db.upsert_brand_kit(WGS_BRAND_KIT)
+    return WGS_BRAND_KIT

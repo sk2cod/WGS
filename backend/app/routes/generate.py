@@ -41,7 +41,7 @@ from app.providers.duotone import duotone_and_cache, get_cached_hero
 from app.providers.image import ImageProvider
 from app.providers.llm import LLMProvider
 from app.taxonomy.loader import get_topics_by_id
-from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
+from app.taxonomy.wgs_brand_kit import get_brand_kit
 
 router = APIRouter()
 
@@ -282,7 +282,7 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
             topic_id=request.topic_id,
             format=request.format,
             goal=request.goal,
-            brand_kit=WGS_BRAND_KIT,
+            brand_kit=get_brand_kit(),
             topics_by_id=get_topics_by_id(),
             store=MemoryStore(),
             llm=LLMProvider(),
@@ -301,7 +301,7 @@ async def generate_from_brief(request: GenerateFromBriefRequest) -> GenerateResp
     fingerprint = f"{brief.topic_id}:{brief.angle}:{brief.approach.value}"
     return await _generate_for_brief(
         brief,
-        brand_kit=WGS_BRAND_KIT,
+        brand_kit=get_brand_kit(),
         llm=LLMProvider(),
         image=ImageProvider(),
         settings=get_settings(),
@@ -319,7 +319,7 @@ async def regenerate_slide_route(request: RegenerateSlideRequest) -> RegenerateS
         slide = await asyncio.to_thread(
             regenerate_slide,
             request.brief,
-            WGS_BRAND_KIT,
+            get_brand_kit(),
             request.post,
             request.slide_index,
             LLMProvider(),
@@ -335,7 +335,7 @@ async def reshuffle_image_route(request: ReshuffleImageRequest) -> ReshuffleImag
         raise HTTPException(status_code=400, detail="only the carousel cover has a hero image")
 
     settings = get_settings()
-    palette = WGS_BRAND_KIT.mood_palettes[request.brief.mood]
+    palette = get_brand_kit().mood_palettes[request.brief.mood]
     keyword = f"{request.brief.topic_id}:v{request.variant}"
     hero_bytes = await asyncio.to_thread(
         _generate_hero_for_keyword,
