@@ -28,10 +28,14 @@ One GitHub repo, two deploy targets (Railway for `backend/`, Vercel for `fronten
 ## 4. Supabase
 
 1. Create a project at supabase.com (or `supabase projects create`).
-2. Run `backend/app/db/schema.sql` against it (SQL editor, or `supabase db push`) — creates `brand_kit`, `memory`, `image_cache` tables and the `heroes` Storage bucket.
+2. Run `backend/app/db/schema.sql` against it (SQL editor, or a direct `psql`/`psycopg` connection using `SUPABASE_DB_URL`) — creates `brand_kit`, `memory`, `image_cache` tables, the `heroes` Storage bucket, and enables RLS on all three tables (full access for `authenticated`, none for `anon` — the backend's `service_role` key bypasses RLS regardless).
 3. Copy the project URL + `service_role` key into Railway's env vars (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`), and the project URL + `anon` key into Vercel's (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
-4. Create one auth user (dashboard → Authentication → Add user) — single-creator app, no signup flow.
+4. Create one auth user (dashboard → Authentication → Add user, email confirmed) — single-creator app, no signup flow. This is the login used at `/login`; every other route redirects there until signed in (`components/AuthGate.tsx`).
 
 ## Verifying
 
-Open the Vercel URL on a phone, generate a post end-to-end (pick → generate → editor → export), and confirm the network calls hit the Railway domain and succeed.
+Open the Vercel URL on a phone, sign in with the one Supabase auth user's credentials, generate a post end-to-end (pick → generate → editor → export), and confirm the network calls hit the Railway domain and succeed.
+
+## Notes on the Vercel alias
+
+`vercel alias set` only binds a domain to one specific deployment — it does not follow future `--prod` deploys. To get a clean URL that auto-tracks production the way the default `<project>.vercel.app` domain does, register it as a project domain instead: `vercel domains add <domain> <project>`.
