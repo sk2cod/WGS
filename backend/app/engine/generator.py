@@ -18,6 +18,7 @@ from app.models.brief import ContentBrief
 from app.models.enums import Format
 from app.models.post import (
     BodySlide,
+    BodyTeachingSlide,
     ClosingSlide,
     CoverSlide,
     GeneratedPost,
@@ -27,11 +28,13 @@ from app.models.post import (
     StatSlide,
 )
 from app.providers.llm import LLMProvider, strip_json_fence
+from app.taxonomy.approaches import TEACHING_BODY_APPROACHES
 from app.taxonomy.voice_register import APPROACH_REGISTER
 
 _ROLE_MODEL = {
     "carousel_cover": CoverSlide,
     "carousel_body": BodySlide,
+    "carousel_body_teaching": BodyTeachingSlide,
     "carousel_closing": ClosingSlide,
     "single_quote": QuoteSlide,
     "single_stat": StatSlide,
@@ -47,6 +50,11 @@ _ROLE_FIELDS_EXAMPLE = {
         '"statement_script": "the one emphasized phrase", '
         '"statement_post": "words after the emphasis (may be empty string)"}'
     ),
+    "carousel_body_teaching": (
+        '{"heading": "a short lead-in label or phrase", '
+        '"body": "1-2 full sentences of the actual teaching content — the real '
+        'substance, not a fragment"}'
+    ),
     "carousel_closing": '{"takeaway": "the one-line takeaway"}',
     "single_quote": '{"quote": "the quote text"}',
     "single_stat": (
@@ -55,19 +63,125 @@ _ROLE_FIELDS_EXAMPLE = {
     ),
 }
 
+# One-line structural definition per approach — without this, a post can be labeled
+# with an approach without its output actually delivering that approach's shape.
+_APPROACH_DEFINITIONS: dict[str, str] = {
+    "educational": (
+        "teaches a specific mechanism or how-to — the actual steps or explanation must "
+        "be present in the text, not just a promise that it's informative."
+    ),
+    "myth_vs_fact": (
+        "states a clearly identifiable misconception AND a clearly identifiable "
+        "correction, both explicit in the text — never merely implied."
+    ),
+    "checklist": (
+        "delivers a concrete, enumerable set of distinct, actionable items — not one "
+        "point restated in different words."
+    ),
+    "story": (
+        "grounds the post in one concrete, relatable scenario or moment — a specific "
+        "situation, not an abstract statement about situations in general."
+    ),
+    "stat_research": (
+        "leads with a specific number or research finding stated as fact in the text, "
+        "then interprets what it means for the reader."
+    ),
+    "question_reflection": (
+        "poses a genuine, specific question the reader is meant to sit with — not a "
+        "rhetorical throwaway — with the post's content oriented around exploring it."
+    ),
+    "framework": (
+        "presents a named structure with distinct, labeled parts (steps, categories, "
+        "phases) the reader could reapply on their own."
+    ),
+    "common_mistakes": (
+        "explicitly names the mistake before correcting it — the mistake itself must "
+        "be stated in the text, not just alluded to."
+    ),
+}
+
+# The cover slide's kicker line must disambiguate the topic through a real sentence,
+# never by degenerating into a taxonomy label — see _brief_system_prompt.
+_KICKER_INSTRUCTION = (
+    "The cover slide's kicker must make the concrete subject and real-world stakes "
+    "unmistakable to a reader with zero other context, in one glance — through "
+    'specific, concrete vocabulary woven into a real sentence a person would '
+    'actually say (e.g. "what to say when they push back on your salary ask"), '
+    "never by inserting the topic or category as a label or tag (e.g. never "
+    '"Career — Salary Negotiation" or "This post is about salary negotiation"). '
+    "If it reads like a label instead of a sentence, it has failed even if the "
+    "subject is technically identifiable — the headline above it carries feeling, "
+    "the kicker carries clarity, and neither should be sacrificed for the other."
+)
+
+# Peer-to-peer, active voice — applies across every approach and slide, not a
+# structural requirement like _APPROACH_DEFINITIONS, so it stands on its own.
+_VOICE_INSTRUCTION = (
+    "Write the way a trusted friend actually talks to her, not at her — active "
+    'voice, direct address ("you"), and the rhythm of real speech. Avoid polished '
+    "copywriting cadences and avoid lecturing; this is a conversation between "
+    "equals, not an authority handing down advice."
+)
+
+# Relatable, everyday specificity — a cross-cutting quality bar, distinct from the
+# `story` approach's structural requirement to be built ENTIRELY around one
+# scenario: this asks every approach to illustrate its point with something
+# concrete, even a checklist or framework, not just `story` posts.
+_SPECIFICITY_INSTRUCTION = (
+    "Illustrate the point with a concrete, everyday moment she might actually be "
+    "in right now — a real scene (a specific meeting, a specific text message, a "
+    "specific conversation) rather than an abstract statement of a principle. "
+    "This applies whatever the approach's structure is — even a checklist or "
+    "framework should be anchored in something recognizably real, not left as "
+    "generic abstraction."
+)
+
+_ACTIONABILITY_INSTRUCTION = (
+    "The post must leave her with something she can actually do, not just "
+    "something to feel or understand — a specific next step, phrase, or shift in "
+    "behavior, not only insight or validation."
+)
+
+# Judgment-based, not mandatory — unlike the instructions above, this is explicitly
+# conditional, so its wording has to license skipping it rather than nudge toward
+# always including it.
+_SAVEABILITY_INSTRUCTION = (
+    "If the topic and angle naturally lend themselves to a concrete, reusable "
+    "takeaway — an exact phrase to say, a specific reframe, a short mental model "
+    "— include it clearly enough that it's worth bookmarking. This is a judgment "
+    "call, not a requirement: a purely relatable or feeling-oriented post should "
+    "not be forced to manufacture a tip it doesn't organically have."
+)
+
+# The substance belongs on the slides, not the caption — without this, real
+# content keeps landing in the caption as a paragraph restatement instead.
+_CAPTION_INSTRUCTION = (
+    "The caption's job is a hook that makes her want to swipe through the slides, "
+    "plus optionally one closing thought that adds something new — never a "
+    "restatement of the slide content in paragraph form. If a reader skips the "
+    "caption entirely, the slides alone must already teach the thing; the caption "
+    "is never where the only copy of the substance lives."
+)
+
 
 def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
     """Deterministic role sequence for this brief — the only place slide shape is
-    decided. Carousel: cover, (n-2) body slides, closing. Single image: the quote
-    card for the poetic register, the stat card for the direct register (Section 6:
-    same poetic/direct split that already resolves brand voice)."""
+    decided. Carousel: cover, (n-2) body slides, closing — the body role is
+    carousel_body_teaching (room for 1-2 full sentences) for approaches in
+    TEACHING_BODY_APPROACHES, carousel_body (a single emphasis fragment) otherwise.
+    Single image: the quote card for the poetic register, the stat card for the
+    direct register (Section 6: same poetic/direct split that already resolves
+    brand voice)."""
     if brief.format == Format.SINGLE_IMAGE:
         register = APPROACH_REGISTER[brief.approach.value]
         return ["single_quote"] if register == "poetic" else ["single_stat"]
 
+    body_role: SlideRole = (
+        "carousel_body_teaching" if brief.approach.value in TEACHING_BODY_APPROACHES else "carousel_body"
+    )
     n = brief.slide_count
     body_count = max(n - 2, 0)
-    return ["carousel_cover"] + ["carousel_body"] * body_count + ["carousel_closing"]
+    return ["carousel_cover"] + [body_role] * body_count + ["carousel_closing"]
 
 
 def _slides_shape_description(roles: list[SlideRole]) -> str:
@@ -83,6 +197,8 @@ def slide_text(slide: Slide) -> str:
         return f"{slide.headline_word} {slide.script_word} {slide.kicker}"
     if isinstance(slide, BodySlide):
         return f"{slide.statement_pre} {slide.statement_script} {slide.statement_post}"
+    if isinstance(slide, BodyTeachingSlide):
+        return f"{slide.heading} {slide.body}"
     if isinstance(slide, ClosingSlide):
         return slide.takeaway
     if isinstance(slide, QuoteSlide):
@@ -131,16 +247,29 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
             f"these sources, never invented from memory:\n{source_lines}\n"
         )
 
+    kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
+
     return (
         f"You write Instagram content for {brand_kit.brand_name}, a page for "
         f"{brand_kit.audience} Niche: {brand_kit.niche}\n\n"
+        "The content itself — not just the tone — must draw on why this topic "
+        "specifically lands differently for a woman: the particular pressure, "
+        "socialization pattern, or double standard at play. Generic advice that "
+        "would apply equally to anyone is not acceptable; the gendered dimension "
+        "must be visible in the actual text.\n\n"
+        f"{_VOICE_INSTRUCTION}\n\n"
+        f"{_SPECIFICITY_INSTRUCTION}\n\n"
+        f"{_ACTIONABILITY_INSTRUCTION}\n\n"
+        f"{_SAVEABILITY_INSTRUCTION}\n\n"
+        f"{_CAPTION_INSTRUCTION}\n\n"
         f"Brand voice traits: {', '.join(brand_kit.voice_traits)}\n"
         f"Voice examples in the register for this post:\n{voice_lines}\n\n"
         f"Never use: {forbidden}\n"
         f"Tone for this post: {', '.join(brief.tone)}\n"
-        f"Approach: {brief.approach.value}\n"
+        f"Approach: {brief.approach.value} — {_APPROACH_DEFINITIONS[brief.approach.value]}\n"
         f"Max words per slide (all text fields on that slide, combined): {brief.max_words_per_slide}\n"
         f"{citation_block}"
+        f"{kicker_block}"
         "\nThis post has the following slides, each already assigned a fixed visual "
         "template — write ONLY the fields listed for its role, nothing else:\n"
         f"{_slides_shape_description(roles)}\n"
@@ -179,10 +308,45 @@ def critique_post(
         if brief.requires_citation
         else ""
     )
+    kicker_instruction = (
+        "Separately check whether the cover slide's kicker reads as a natural sentence "
+        "with concrete, disambiguating detail — not a label or a restated topic/category "
+        "name. "
+        if "carousel_cover" in roles
+        else ""
+    )
+    approach_instruction = (
+        f"Separately check whether the post's structure actually delivers the "
+        f"'{brief.approach.value}' approach as defined above, not merely labeled with "
+        f"it — {_APPROACH_DEFINITIONS[brief.approach.value]} "
+    )
+    voice_instruction = (
+        "Separately check whether it reads as active-voice, direct-address, "
+        "peer-to-peer speech rather than polished copywriting or a lecture. "
+    )
+    specificity_instruction = (
+        "Separately check whether the point is illustrated with a concrete, "
+        "everyday moment or real scene rather than left as an abstract statement "
+        "of a principle. "
+    )
+    actionability_instruction = (
+        "Separately check whether it leaves her with something she can actually "
+        "do — a specific next step, phrase, or behavior shift — not only insight "
+        "or validation. "
+    )
+    saveability_instruction = (
+        "Separately judge whether the topic and angle naturally had room for a "
+        "concrete, reusable takeaway (an exact phrase, a specific reframe, a short "
+        "mental model) and the draft missed it — only flag this if the opportunity "
+        "was genuinely there; do not ask for one to be manufactured on a purely "
+        "relatable or feeling-oriented post that doesn't call for it. "
+    )
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         "Critique it against the brand voice, the forbidden list, tone, word limits, and "
         f"whether it reads as specific rather than generic. {citation_instruction}"
+        f"{kicker_instruction}{approach_instruction}{voice_instruction}"
+        f"{specificity_instruction}{actionability_instruction}{saveability_instruction}"
         "Be concrete and short — list only real problems, or say 'no changes needed'."
     )
     return llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=500)

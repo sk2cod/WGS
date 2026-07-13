@@ -5,9 +5,17 @@ from app.models.brief import ContentBrief
 from app.models.enums import Approach, Format
 from app.models.memory import MemoryRecord, next_masthead_number
 from app.models.topic import Topic
+from app.taxonomy.approaches import TEACHING_BODY_APPROACHES
 from app.taxonomy.voice_register import APPROACH_REGISTER
 
-_DEFAULT_SLIDE_COUNT = {Format.CAROUSEL: 3, Format.SINGLE_IMAGE: 1}
+
+def _default_slide_count(format: Format, approach: Approach) -> int:
+    """Carousels default to 4 slides (cover + 2 teaching body + closing) for
+    approaches that need real teaching room, 3 otherwise (cover + 1 body +
+    closing) — see taxonomy/approaches.py:TEACHING_BODY_APPROACHES."""
+    if format == Format.SINGLE_IMAGE:
+        return 1
+    return 4 if approach.value in TEACHING_BODY_APPROACHES else 3
 
 
 class BriefResult(BaseModel):
@@ -42,7 +50,9 @@ def build_brief(
     register = APPROACH_REGISTER[approach.value]
     brand_voice_samples = list(getattr(brand_kit.voice_samples, register))
 
-    resolved_slide_count = slide_count if slide_count is not None else _DEFAULT_SLIDE_COUNT[format]
+    resolved_slide_count = (
+        slide_count if slide_count is not None else _default_slide_count(format, approach)
+    )
 
     brief = ContentBrief(
         topic_id=topic.id,

@@ -1,5 +1,6 @@
 import type {
   CarouselBodyContent,
+  CarouselBodyTeachingContent,
   CarouselClosingContent,
   CarouselCoverContent,
   Mood,
@@ -56,6 +57,9 @@ export interface ApiCoverSlide extends CarouselCoverContent {
 export interface ApiBodySlide extends CarouselBodyContent {
   template_id: "carousel_body";
 }
+export interface ApiBodyTeachingSlide extends CarouselBodyTeachingContent {
+  template_id: "carousel_body_teaching";
+}
 export interface ApiClosingSlide extends CarouselClosingContent {
   template_id: "carousel_closing";
 }
@@ -69,6 +73,7 @@ export interface ApiStatSlide extends SingleStatContent {
 export type ApiSlide =
   | ApiCoverSlide
   | ApiBodySlide
+  | ApiBodyTeachingSlide
   | ApiClosingSlide
   | ApiQuoteSlide
   | ApiStatSlide;

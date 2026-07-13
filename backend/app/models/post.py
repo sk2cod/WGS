@@ -8,7 +8,14 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
 
-SlideRole = Literal["carousel_cover", "carousel_body", "carousel_closing", "single_quote", "single_stat"]
+SlideRole = Literal[
+    "carousel_cover",
+    "carousel_body",
+    "carousel_body_teaching",
+    "carousel_closing",
+    "single_quote",
+    "single_stat",
+]
 
 
 class CoverSlide(BaseModel):
@@ -23,6 +30,15 @@ class BodySlide(BaseModel):
     statement_pre: str     # words before the emphasized phrase (may be empty)
     statement_script: str  # exactly one emphasized phrase, script font
     statement_post: str    # words after the emphasized phrase (may be empty)
+
+
+class BodyTeachingSlide(BaseModel):
+    """Room for 1-2 full sentences of actual teaching content — distinct from
+    BodySlide's single emphasis fragment, which can't hold real substance."""
+
+    template_id: Literal["carousel_body_teaching"] = "carousel_body_teaching"
+    heading: str    # a short lead-in label or phrase
+    body: str        # 1-2 full sentences of the actual teaching content
 
 
 class ClosingSlide(BaseModel):
@@ -46,7 +62,7 @@ class StatSlide(BaseModel):
 
 
 Slide = Annotated[
-    Union[CoverSlide, BodySlide, ClosingSlide, QuoteSlide, StatSlide],
+    Union[CoverSlide, BodySlide, BodyTeachingSlide, ClosingSlide, QuoteSlide, StatSlide],
     Field(discriminator="template_id"),
 ]
 

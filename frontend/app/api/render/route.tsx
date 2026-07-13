@@ -4,11 +4,13 @@ import { loadSlideFonts } from "@/lib/fonts";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas";
 import CarouselCover from "@/components/slides/CarouselCover";
 import CarouselBody from "@/components/slides/CarouselBody";
+import CarouselBodyTeaching from "@/components/slides/CarouselBodyTeaching";
 import CarouselClosing from "@/components/slides/CarouselClosing";
 import SingleQuote from "@/components/slides/SingleQuote";
 import SingleStat from "@/components/slides/SingleStat";
 import type {
   CarouselBodyContent,
+  CarouselBodyTeachingContent,
   CarouselClosingContent,
   CarouselCoverContent,
   RenderRequestBody,
@@ -71,6 +73,11 @@ export async function POST(req: NextRequest) {
     case "carousel_body": {
       const c = content as CarouselBodyContent;
       element = <CarouselBody masthead={masthead} tokens={tokens} {...c} />;
+      break;
+    }
+    case "carousel_body_teaching": {
+      const c = content as CarouselBodyTeachingContent;
+      element = <CarouselBodyTeaching masthead={masthead} tokens={tokens} {...c} />;
       break;
     }
     case "carousel_closing": {

@@ -1,5 +1,6 @@
 import type {
   CarouselBodyContent,
+  CarouselBodyTeachingContent,
   CarouselClosingContent,
   CarouselCoverContent,
   MastheadInfo,
@@ -27,6 +28,11 @@ export const PLACEHOLDER_BODY: CarouselBodyContent = {
   statement_pre: "Confidence isn't a feeling you",
   statement_script: "wait for.",
   statement_post: "It's a skill you build one uncomfortable conversation at a time.",
+};
+
+export const PLACEHOLDER_BODY_TEACHING: CarouselBodyTeachingContent = {
+  heading: "The mistake",
+  body: "Waiting for confidence before you speak up is backwards — the confidence shows up after you've done the uncomfortable thing a few times, not before.",
 };
 
 export const PLACEHOLDER_CLOSING: CarouselClosingContent = {

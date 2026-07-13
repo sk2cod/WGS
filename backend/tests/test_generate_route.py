@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+import re
 from io import BytesIO
 
 import pytest
@@ -16,18 +17,6 @@ from app.taxonomy.loader import get_topics_by_id
 from app.taxonomy.voice_register import APPROACH_REGISTER
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
-_ANGLE_JSON = json.dumps({"angle": "a specific test angle", "mood": "bold"})
-_DRAFT_CAROUSEL_JSON = json.dumps(
-    {
-        "slides": [
-            {"headline_word": "PAUSE", "script_word": "first.", "kicker": "short kicker one"},
-            {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
-            {"takeaway": "short body three"},
-        ],
-        "caption": "a caption",
-        "hashtags": ["#a", "#b"],
-    }
-)
 _DRAFT_SINGLE_QUOTE_JSON = json.dumps(
     {"slides": [{"quote": "one punchy line"}], "caption": "a caption", "hashtags": ["#a"]}
 )
@@ -39,6 +28,16 @@ _DRAFT_SINGLE_STAT_JSON = json.dumps(
     }
 )
 
+# Placeholder content per possible carousel body-slot role — which role(s) actually
+# get requested depends on the (randomly sampled) approach, so carousel drafts are
+# generated adaptively (see _AdaptiveLLM) rather than as one fixed fragment/count.
+_SLIDE_CONTENT_BY_ROLE = {
+    "carousel_cover": {"headline_word": "PAUSE", "script_word": "first.", "kicker": "short kicker"},
+    "carousel_body": {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
+    "carousel_body_teaching": {"heading": "A heading", "body": "A full sentence of teaching content here."},
+    "carousel_closing": {"takeaway": "short body three"},
+}
+
 
 class _QueueLLM:
     def __init__(self, responses: list[str]):
@@ -46,6 +45,22 @@ class _QueueLLM:
 
     def complete(self, *, tier, system, prompt, max_tokens, cache=True):
         return self._responses.pop(0)
+
+
+class _AdaptiveCarouselLLM:
+    """Returns canned cheap-tier (angle) responses in order, and for strong-tier
+    (draft) calls, builds a slide list matching whatever roles the system prompt
+    actually asked for — robust to whichever approach the angle engine samples."""
+
+    def __init__(self, angle_responses: list[str]):
+        self._angle_responses = list(angle_responses)
+
+    def complete(self, *, tier, system, prompt, max_tokens, cache=True):
+        if tier == "cheap":
+            return self._angle_responses.pop(0)
+        roles = re.findall(r"Slide \d+ \((\w+)\)", system)
+        slides = [_SLIDE_CONTENT_BY_ROLE[r] for r in roles]
+        return json.dumps({"slides": slides, "caption": "a caption", "hashtags": ["#a", "#b"]})
 
 
 class _FakeImage:
@@ -82,7 +97,7 @@ def _isolated_hero_cache(tmp_path, monkeypatch):
 
 def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
     store = MemoryStore(path=tmp_path / "memory.json")
-    llm = _QueueLLM([_ANGLE_JSON, _DRAFT_CAROUSEL_JSON])
+    llm = _AdaptiveCarouselLLM([json.dumps({"angle": "a specific test angle", "mood": "bold"})])
     image = _FakeImage()
 
     result = asyncio.run(
@@ -98,8 +113,8 @@ def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
         )
     )
 
-    assert len(result.post.slides) == 3
     assert result.post.slides[0].template_id == "carousel_cover"
+    assert result.post.slides[-1].template_id == "carousel_closing"
     assert result.brief.mood == "bold"
     assert result.brief.angle == "a specific test angle"
     assert result.hero_image_base64 is not None
@@ -116,7 +131,7 @@ def test_run_generate_single_image_skips_hero_entirely(tmp_path):
     store = MemoryStore(path=tmp_path / "memory.json")
     seed = 0
     draft_json = _single_image_draft_for_seed("mindset-reframing-self-doubt", seed)
-    llm = _QueueLLM([_ANGLE_JSON, draft_json])
+    llm = _QueueLLM([json.dumps({"angle": "a specific test angle", "mood": "bold"}), draft_json])
     image = _FakeImage()
 
     result = asyncio.run(
@@ -142,7 +157,7 @@ def test_run_generate_reruns_of_same_topic_yield_different_angle(tmp_path):
     store = MemoryStore(path=tmp_path / "memory.json")
     angle_1 = json.dumps({"angle": "angle one", "mood": "wisdom"})
     angle_2 = json.dumps({"angle": "angle two", "mood": "wisdom"})
-    llm = _QueueLLM([angle_1, _DRAFT_CAROUSEL_JSON, angle_2, _DRAFT_CAROUSEL_JSON])
+    llm = _AdaptiveCarouselLLM([angle_1, angle_2])
     image = _FakeImage()
 
     kwargs = dict(

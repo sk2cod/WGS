@@ -29,6 +29,16 @@ _DRAFT_CAROUSEL_JSON = json.dumps(
     }
 )
 
+# question_reflection isn't in TEACHING_BODY_APPROACHES, so a carousel using it gets
+# the old 3-slide (cover/body/closing) shape above — used to force a deterministic
+# slide count/shape in tests that are about route wiring, not approach-driven shape.
+_NON_TEACHING_PRESELECTED = {
+    "angle": "her exact accepted angle",
+    "approach": "question_reflection",
+    "mood": "wisdom",
+    "fingerprint": "mindset-reframing-self-doubt:custom:question_reflection",
+}
+
 
 class _QueueLLM:
     def __init__(self, responses):
@@ -63,12 +73,17 @@ def _isolated_cache(tmp_path, monkeypatch):
 
 
 def test_generate_route_returns_full_brief_and_post(monkeypatch):
-    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_ANGLE_JSON, _DRAFT_CAROUSEL_JSON]))
+    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_DRAFT_CAROUSEL_JSON]))
     monkeypatch.setattr(generate_module, "ImageProvider", _FakeImage)
 
     client = TestClient(app)
     response = client.post(
-        "/generate", json={"topic_id": "mindset-reframing-self-doubt", "format": "carousel"}
+        "/generate",
+        json={
+            "topic_id": "mindset-reframing-self-doubt",
+            "format": "carousel",
+            **_NON_TEACHING_PRESELECTED,
+        },
     )
 
     assert response.status_code == 200
@@ -91,12 +106,17 @@ def test_generate_route_unknown_topic_returns_404(monkeypatch):
 
 
 def test_regenerate_slide_route_updates_one_slide(monkeypatch):
-    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_ANGLE_JSON, _DRAFT_CAROUSEL_JSON]))
+    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_DRAFT_CAROUSEL_JSON]))
     monkeypatch.setattr(generate_module, "ImageProvider", _FakeImage)
 
     client = TestClient(app)
     generated = client.post(
-        "/generate", json={"topic_id": "mindset-reframing-self-doubt", "format": "carousel"}
+        "/generate",
+        json={
+            "topic_id": "mindset-reframing-self-doubt",
+            "format": "carousel",
+            **_NON_TEACHING_PRESELECTED,
+        },
     ).json()
 
     monkeypatch.setattr(
@@ -118,12 +138,17 @@ def test_regenerate_slide_route_updates_one_slide(monkeypatch):
 
 
 def test_regenerate_slide_route_out_of_range_returns_400(monkeypatch):
-    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_ANGLE_JSON, _DRAFT_CAROUSEL_JSON]))
+    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_DRAFT_CAROUSEL_JSON]))
     monkeypatch.setattr(generate_module, "ImageProvider", _FakeImage)
 
     client = TestClient(app)
     generated = client.post(
-        "/generate", json={"topic_id": "mindset-reframing-self-doubt", "format": "carousel"}
+        "/generate",
+        json={
+            "topic_id": "mindset-reframing-self-doubt",
+            "format": "carousel",
+            **_NON_TEACHING_PRESELECTED,
+        },
     ).json()
 
     monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([]))
@@ -137,12 +162,17 @@ def test_regenerate_slide_route_out_of_range_returns_400(monkeypatch):
 
 def test_reshuffle_image_route_returns_new_hero_without_full_regenerate(monkeypatch):
     fake_image = _FakeImage()
-    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_ANGLE_JSON, _DRAFT_CAROUSEL_JSON]))
+    monkeypatch.setattr(generate_module, "LLMProvider", lambda: _QueueLLM([_DRAFT_CAROUSEL_JSON]))
     monkeypatch.setattr(generate_module, "ImageProvider", lambda: fake_image)
 
     client = TestClient(app)
     generated = client.post(
-        "/generate", json={"topic_id": "mindset-reframing-self-doubt", "format": "carousel"}
+        "/generate",
+        json={
+            "topic_id": "mindset-reframing-self-doubt",
+            "format": "carousel",
+            **_NON_TEACHING_PRESELECTED,
+        },
     ).json()
     assert fake_image.call_count == 1  # the initial cover generation
 
@@ -198,10 +228,8 @@ def test_generate_route_honors_preselected_angle_skips_resampling(monkeypatch):
         json={
             "topic_id": "mindset-reframing-self-doubt",
             "format": "carousel",
-            "angle": "her exact accepted angle",
-            "approach": "story",
+            **_NON_TEACHING_PRESELECTED,
             "mood": "celebratory",
-            "fingerprint": "mindset-reframing-self-doubt:custom:story",
         },
     )
 
@@ -209,7 +237,7 @@ def test_generate_route_honors_preselected_angle_skips_resampling(monkeypatch):
     body = response.json()
     assert body["brief"]["angle"] == "her exact accepted angle"
     assert body["brief"]["mood"] == "celebratory"
-    assert body["brief"]["approach"] == "story"
+    assert body["brief"]["approach"] == "question_reflection"
 
 
 def test_generate_from_brief_route_handles_non_taxonomy_topic_id(monkeypatch):

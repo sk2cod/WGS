@@ -2,6 +2,7 @@ import type { ApiSlide } from "@/lib/api-types";
 import type { MastheadInfo, ResolvedTokens } from "@/lib/types";
 import CarouselCover from "@/components/slides/CarouselCover";
 import CarouselBody from "@/components/slides/CarouselBody";
+import CarouselBodyTeaching from "@/components/slides/CarouselBodyTeaching";
 import CarouselClosing from "@/components/slides/CarouselClosing";
 import SingleQuote from "@/components/slides/SingleQuote";
 import SingleStat from "@/components/slides/SingleStat";
@@ -30,6 +31,8 @@ export default function SlideRenderer({ slide, masthead, tokens, heroImageUrl }:
       );
     case "carousel_body":
       return <CarouselBody masthead={masthead} tokens={tokens} {...slide} />;
+    case "carousel_body_teaching":
+      return <CarouselBodyTeaching masthead={masthead} tokens={tokens} {...slide} />;
     case "carousel_closing":
       return <CarouselClosing masthead={masthead} tokens={tokens} {...slide} />;
     case "single_quote":

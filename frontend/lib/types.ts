@@ -54,6 +54,7 @@ export interface MastheadInfo {
 export type TemplateId =
   | "carousel_cover"
   | "carousel_body"
+  | "carousel_body_teaching"
   | "carousel_closing"
   | "single_quote"
   | "single_stat";
@@ -69,6 +70,13 @@ export interface CarouselBodyContent {
   statement_pre: string;
   statement_script: string;
   statement_post: string;
+}
+
+/** Room for 1-2 full sentences of actual teaching content — distinct from
+ * CarouselBodyContent's single emphasis fragment, which can't hold real substance. */
+export interface CarouselBodyTeachingContent {
+  heading: string;
+  body: string;
 }
 
 export interface CarouselClosingContent {
@@ -91,6 +99,7 @@ export interface SingleStatContent {
 export type SlideContent =
   | CarouselCoverContent
   | CarouselBodyContent
+  | CarouselBodyTeachingContent
   | CarouselClosingContent
   | SingleQuoteContent
   | SingleStatContent;
