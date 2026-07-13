@@ -46,7 +46,7 @@ After finishing any phase: invoke an independent check against that phase's "Don
 
 - `backend/.env` and `frontend/.env.local` exist locally with real API keys already filled in — **do not recreate them or generate fresh `.env.example` placeholders that overwrite real values.**
 - Both are correctly gitignored — verify with `git status` before any commit that they don't appear as staged.
-- `IMAGE_QUALITY=medium` for now — a planned experiment (not yet run) to test dropping to `low` after seeing real duotoned output, since duotone likely erases the quality difference.
+- `IMAGE_QUALITY=low` — the medium→low experiment ran: duotoned output is visually indistinguishable, and low cut worst-case `/generate` latency roughly in half-to-third (100+s outliers down to a consistent ~20-32s) plus ~8x lower image cost. Switched on both Railway and local `.env`.
 
 ---
 
