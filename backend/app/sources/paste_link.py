@@ -6,15 +6,17 @@ article itself."""
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 
 import trafilatura
 
-from app.engine.brief_builder import BriefResult
+from app.engine.brief_builder import BriefResult, _hero_image_prompt
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief, Source
 from app.models.enums import Approach, Format
 from app.models.memory import MemoryRecord, next_masthead_number
+from app.providers.llm import LLMProvider, strip_json_fence
 from app.taxonomy.voice_register import APPROACH_REGISTER
 
 _SLIDE_COUNT = {Format.CAROUSEL: 3, Format.SINGLE_IMAGE: 1}
@@ -46,10 +48,36 @@ def extract_source(url: str) -> Source:
     )
 
 
+def _generate_visual_subject(source: Source, llm: LLMProvider) -> str:
+    """Cheap-tier call: one concrete image/object/scene tied to this specific
+    article — mirrors angle_engine.generate_angle's visual_subject (Section 5),
+    just sourced from an extracted article instead of a sampled angle. An image
+    model can't visually translate a headline any better than it can an angle."""
+    system = (
+        "You describe ONE concrete image, object, or scene for an editorial hero "
+        "photo illustrating a news article — 5-15 words, something a photographer "
+        "could actually go photograph, genuinely tied to this specific article's "
+        'subject. Never an abstract word like "progress", "justice", or '
+        '"change", and never a generic stock-photo trope like a gavel, a '
+        "handshake, or a winding path.\n"
+        'Respond with ONLY JSON, no markdown fence: {"visual_subject": "..."}'
+    )
+    prompt = f"Article title: {source.title}\nExcerpt: {source.excerpt[:500]}"
+
+    raw = llm.complete(tier="cheap", system=system, prompt=prompt, max_tokens=100)
+    try:
+        data = json.loads(strip_json_fence(raw))
+        subject = str(data.get("visual_subject") or "").strip()
+    except (json.JSONDecodeError, AttributeError):
+        subject = ""
+    return subject or source.title
+
+
 def build_paste_link_brief(
     source: Source,
     brand_kit: BrandKit,
     memory: list[MemoryRecord],
+    llm: LLMProvider,
     *,
     format: Format = Format.CAROUSEL,
     approach: Approach = Approach.STAT_RESEARCH,
@@ -60,6 +88,7 @@ def build_paste_link_brief(
     register = APPROACH_REGISTER[approach.value]
     brand_voice_samples = list(getattr(brand_kit.voice_samples, register))
     topic_id = f"paste-link:{hashlib.sha256((source.url or source.title).encode()).hexdigest()[:12]}"
+    visual_subject = _generate_visual_subject(source, llm)
 
     brief = ContentBrief(
         topic_id=topic_id,
@@ -76,10 +105,7 @@ def build_paste_link_brief(
         requires_citation=True,
         sensitivity="normal",
         sources=[source],
-        hero_image_prompt=(
-            f"Abstract, editorial, textural image evoking '{source.title}' — "
-            f"no literal faces or text, {mood} mood."
-        ),
+        hero_image_prompt=_hero_image_prompt(visual_subject, mood),
     )
 
     masthead_number = next_masthead_number(category, memory)

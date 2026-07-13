@@ -71,6 +71,7 @@ export interface AcceptedProposal {
   angle: string;
   approach: Approach;
   mood: Mood;
+  visual_subject: string;
   fingerprint: string;
 }
 

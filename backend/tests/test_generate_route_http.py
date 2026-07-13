@@ -36,6 +36,7 @@ _NON_TEACHING_PRESELECTED = {
     "angle": "her exact accepted angle",
     "approach": "question_reflection",
     "mood": "wisdom",
+    "visual_subject": "a sticky note reading 'not today' on a bathroom mirror",
     "fingerprint": "mindset-reframing-self-doubt:custom:question_reflection",
 }
 
@@ -190,7 +191,16 @@ def test_propose_route_returns_angle_approach_and_reason(monkeypatch):
         generate_module,
         "LLMProvider",
         lambda: _QueueLLM(
-            [json.dumps({"angle": "a proposed angle", "mood": "bold", "reason": "because it's punchy"})]
+            [
+                json.dumps(
+                    {
+                        "angle": "a proposed angle",
+                        "mood": "bold",
+                        "reason": "because it's punchy",
+                        "visual_subject": "a torn-up to-do list on a kitchen counter",
+                    }
+                )
+            ]
         ),
     )
 
@@ -204,6 +214,7 @@ def test_propose_route_returns_angle_approach_and_reason(monkeypatch):
     assert body["angle"] == "a proposed angle"
     assert body["mood"] == "bold"
     assert body["reason"] == "because it's punchy"
+    assert body["visual_subject"] == "a torn-up to-do list on a kitchen counter"
     assert body["fingerprint"]
 
 

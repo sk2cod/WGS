@@ -18,6 +18,15 @@ def _default_slide_count(format: Format, approach: Approach) -> int:
     return 4 if approach.value in TEACHING_BODY_APPROACHES else 3
 
 
+def _hero_image_prompt(subject: str, mood: str) -> str:
+    """`subject` should be a concrete visual_subject (angle_engine), not a raw
+    multi-sentence angle — an image model can't visually translate an argument,
+    only a scene. No manual quote-wrapping around free text either: `subject`
+    may itself contain apostrophes, and nesting unescaped text inside quote
+    characters is fragile."""
+    return f"Abstract, editorial, textural image of {subject}, no literal faces or text, {mood} mood."
+
+
 class BriefResult(BaseModel):
     """`ContentBrief` plus the masthead string computed for it. The masthead itself
     isn't part of the ContentBrief contract (Section 6) — it's a render-time label
@@ -39,6 +48,7 @@ def build_brief(
     memory: list[MemoryRecord],
     goal: str = "educate",
     slide_count: int | None = None,
+    visual_subject: str | None = None,
 ) -> BriefResult:
     """Assemble a ContentBrief for one post: resolve which BrandKit voice register
     (poetic or direct) this approach draws from, inject only that list, and compute
@@ -69,10 +79,7 @@ def build_brief(
         requires_citation=topic.requires_citation,
         sensitivity=topic.sensitivity,
         sources=[],
-        hero_image_prompt=(
-            f"Abstract, editorial, textural image evoking '{angle}' — "
-            f"no literal faces or text, {mood} mood."
-        ),
+        hero_image_prompt=_hero_image_prompt(visual_subject or angle, mood),
     )
 
     masthead = next_masthead_number(topic.primary_category, memory)

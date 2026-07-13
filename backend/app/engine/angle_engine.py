@@ -27,6 +27,7 @@ class SampledAngle:
     angle: str
     mood: str
     reason: str
+    visual_subject: str
     fingerprint: str
 
 
@@ -58,14 +59,19 @@ def sample_cell(
 
 
 def _parse_angle_response(
-    raw: str, *, fallback_angle: str, fallback_reason: str
-) -> tuple[str, str, str]:
-    angle, mood, reason = "", "", ""
+    raw: str,
+    *,
+    fallback_angle: str,
+    fallback_reason: str,
+    fallback_visual_subject: str,
+) -> tuple[str, str, str, str]:
+    angle, mood, reason, visual_subject = "", "", "", ""
     try:
         data = json.loads(strip_json_fence(raw))
         angle = str(data.get("angle") or "").strip()
         mood = str(data.get("mood") or "").strip().lower()
         reason = str(data.get("reason") or "").strip()
+        visual_subject = str(data.get("visual_subject") or "").strip()
     except (json.JSONDecodeError, AttributeError):
         pass
 
@@ -75,7 +81,9 @@ def _parse_angle_response(
         mood = DEFAULT_MOOD
     if not reason:
         reason = fallback_reason
-    return angle, mood, reason
+    if not visual_subject:
+        visual_subject = fallback_visual_subject
+    return angle, mood, reason, visual_subject
 
 
 def generate_angle(
@@ -95,8 +103,16 @@ def generate_angle(
         "for milestone/win angles. And you write a one-line reason (said to the reader "
         "as a quick pitch, e.g. \"a personal story lands this best\") for why this "
         "approach fits the angle.\n"
+        "You also write visual_subject: 5-15 words naming ONE concrete image, object, "
+        "or scene genuinely tied to THIS specific topic and angle — something a "
+        "photographer could actually go photograph (e.g. \"a hand hovering over "
+        "send on a half-written text message\", \"a cluttered desk with an unsigned "
+        "resignation letter\"). Never an abstract mood word like \"transformation\", "
+        '"growth", or "balance", and never a generic stock-photo trope like a '
+        "staircase or a winding path — it must be recognizably specific to this "
+        "angle, not swappable with any other post's.\n"
         "Respond with ONLY JSON, no markdown fence: "
-        '{"angle": "...", "mood": "...", "reason": "..."}'
+        '{"angle": "...", "mood": "...", "reason": "...", "visual_subject": "..."}'
     )
     prompt = (
         f"Topic: {topic.name}\n"
@@ -106,11 +122,12 @@ def generate_angle(
         f"Knowledge hints: {', '.join(topic.knowledge_hints) or 'none'}"
     )
 
-    raw = llm.complete(tier="cheap", system=system, prompt=prompt, max_tokens=250)
-    angle_text, mood, reason = _parse_angle_response(
+    raw = llm.complete(tier="cheap", system=system, prompt=prompt, max_tokens=300)
+    angle_text, mood, reason, visual_subject = _parse_angle_response(
         raw,
         fallback_angle=sub_concept,
         fallback_reason=f"a {approach.value.replace('_', ' ')} take on {sub_concept}",
+        fallback_visual_subject=sub_concept,
     )
 
     return SampledAngle(
@@ -120,5 +137,6 @@ def generate_angle(
         angle=angle_text,
         mood=mood,
         reason=reason,
+        visual_subject=visual_subject,
         fingerprint=_fingerprint(topic.id, sub_concept, approach),
     )

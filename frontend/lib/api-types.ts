@@ -104,6 +104,7 @@ export interface ProposeResponse {
   approach: Approach;
   mood: Mood;
   reason: string;
+  visual_subject: string;
   fingerprint: string;
 }
 

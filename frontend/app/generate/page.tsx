@@ -72,6 +72,7 @@ function GenerateScreen() {
         angle: proposal.angle,
         approach: proposal.approach,
         mood: proposal.mood,
+        visual_subject: proposal.visual_subject,
         fingerprint: proposal.fingerprint,
       });
       saveCurrentPost(generated);

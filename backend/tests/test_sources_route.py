@@ -1,6 +1,7 @@
 """End-to-end route test for POST /sources/paste-link, via FastAPI's TestClient.
-trafilatura is monkeypatched so no real network fetch happens."""
+trafilatura and LLMProvider are monkeypatched so no real network/API call happens."""
 
+import json
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -11,12 +12,18 @@ from app.engine.memory import MemoryStore
 from app.main import app
 
 
-def _patch_memory_store(monkeypatch, tmp_path):
+class _FakeLLM:
+    def complete(self, *, tier, system, prompt, max_tokens, cache=True):
+        return json.dumps({"visual_subject": "a stack of unopened certified mail on a doormat"})
+
+
+def _patch_dependencies(monkeypatch, tmp_path):
     monkeypatch.setattr(sources_module, "MemoryStore", lambda: MemoryStore(path=tmp_path / "memory.json"))
+    monkeypatch.setattr(sources_module, "LLMProvider", _FakeLLM)
 
 
 def test_paste_link_route_returns_attributed_brief(tmp_path, monkeypatch):
-    _patch_memory_store(monkeypatch, tmp_path)
+    _patch_dependencies(monkeypatch, tmp_path)
     monkeypatch.setattr(paste_link_module.trafilatura, "fetch_url", lambda url: "<html>fake</html>")
     monkeypatch.setattr(paste_link_module.trafilatura, "extract", lambda html: "Extracted article body.")
     monkeypatch.setattr(
@@ -34,10 +41,14 @@ def test_paste_link_route_returns_attributed_brief(tmp_path, monkeypatch):
     assert len(body["brief"]["sources"]) == 1
     assert body["brief"]["sources"][0]["url"] == "https://example.com/article"
     assert body["brief"]["topic_name"] == "Test Article"
+    assert body["brief"]["hero_image_prompt"] == (
+        "Abstract, editorial, textural image of a stack of unopened certified mail "
+        "on a doormat, no literal faces or text, wisdom mood."
+    )
 
 
 def test_paste_link_route_returns_422_on_fetch_failure(tmp_path, monkeypatch):
-    _patch_memory_store(monkeypatch, tmp_path)
+    _patch_dependencies(monkeypatch, tmp_path)
     monkeypatch.setattr(paste_link_module.trafilatura, "fetch_url", lambda url: None)
 
     client = TestClient(app)

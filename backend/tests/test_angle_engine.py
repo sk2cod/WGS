@@ -81,6 +81,7 @@ def test_generate_angle_falls_back_on_malformed_json():
     result = generate_angle(topic, [], llm, rng=random.Random(3))
     assert result.mood == DEFAULT_MOOD
     assert result.angle  # falls back to the sampled sub-concept, never empty
+    assert result.visual_subject  # also falls back to the sampled sub-concept, never empty
 
 
 def test_generate_angle_strips_markdown_fence():
@@ -90,3 +91,25 @@ def test_generate_angle_strips_markdown_fence():
     result = generate_angle(topic, [], llm, rng=random.Random(4))
     assert result.angle == "fenced angle"
     assert result.mood == "celebratory"
+
+
+def test_generate_angle_parses_visual_subject():
+    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    llm = _FakeLLM(
+        json.dumps(
+            {
+                "angle": "a very specific angle",
+                "mood": "bold",
+                "visual_subject": "a phone screen showing an unsent text, thumb hovering over send",
+            }
+        )
+    )
+    result = generate_angle(topic, [], llm, rng=random.Random(1))
+    assert result.visual_subject == "a phone screen showing an unsent text, thumb hovering over send"
+
+
+def test_generate_angle_visual_subject_falls_back_to_sub_concept_when_missing():
+    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    llm = _FakeLLM(json.dumps({"angle": "a very specific angle", "mood": "bold"}))
+    result = generate_angle(topic, [], llm, rng=random.Random(1))
+    assert result.visual_subject == result.sub_concept

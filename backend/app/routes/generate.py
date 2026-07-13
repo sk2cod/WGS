@@ -58,6 +58,7 @@ class ProposeResponse(BaseModel):
     approach: Approach
     mood: str
     reason: str
+    visual_subject: str
     fingerprint: str
 
 
@@ -65,12 +66,13 @@ class GenerateRequest(BaseModel):
     topic_id: str
     format: Format
     goal: str = "educate"
-    # if set (all four together, as returned by /generate/propose), the already-shown
+    # if set (all five together, as returned by /generate/propose), the already-shown
     # proposal is honored as-is rather than sampling a fresh one — so what she accepted
     # is what she gets, not a different roll of the angle engine.
     angle: str | None = None
     approach: Approach | None = None
     mood: str | None = None
+    visual_subject: str | None = None
     fingerprint: str | None = None
 
 
@@ -213,6 +215,7 @@ async def run_generate(
         brand_kit=brand_kit,
         memory=memory,
         goal=goal,
+        visual_subject=sampled.visual_subject,
     )
 
     return await _generate_for_brief(
@@ -248,6 +251,7 @@ async def propose(request: ProposeRequest) -> ProposeResponse:
         approach=sampled.approach,
         mood=sampled.mood,
         reason=sampled.reason,
+        visual_subject=sampled.visual_subject,
         fingerprint=sampled.fingerprint,
     )
 
@@ -255,7 +259,13 @@ async def propose(request: ProposeRequest) -> ProposeResponse:
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest) -> GenerateResponse:
     preselected = None
-    if None not in (request.angle, request.approach, request.mood, request.fingerprint):
+    if None not in (
+        request.angle,
+        request.approach,
+        request.mood,
+        request.visual_subject,
+        request.fingerprint,
+    ):
         preselected = SampledAngle(
             sub_concept="",
             approach=request.approach,  # type: ignore[arg-type]
@@ -263,6 +273,7 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
             angle=request.angle,  # type: ignore[arg-type]
             mood=request.mood,  # type: ignore[arg-type]
             reason="",
+            visual_subject=request.visual_subject,  # type: ignore[arg-type]
             fingerprint=request.fingerprint,  # type: ignore[arg-type]
         )
 
