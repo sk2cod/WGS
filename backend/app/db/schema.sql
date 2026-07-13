@@ -57,3 +57,25 @@ create table if not exists image_cache (
 insert into storage.buckets (id, name, public)
 values ('heroes', 'heroes', true)
 on conflict (id) do nothing;
+
+-- Row Level Security: the backend talks to these tables via the service_role key,
+-- which bypasses RLS entirely, so this only locks down the anon/authenticated keys
+-- that ship in the frontend bundle. Single creator, one auth user -> any authenticated
+-- session gets full access; anon (logged-out) gets none.
+alter table brand_kit enable row level security;
+alter table memory enable row level security;
+alter table image_cache enable row level security;
+
+grant select, insert, update, delete on brand_kit, memory, image_cache to authenticated;
+
+drop policy if exists "authenticated_full_access" on brand_kit;
+create policy "authenticated_full_access" on brand_kit
+    for all to authenticated using (true) with check (true);
+
+drop policy if exists "authenticated_full_access" on memory;
+create policy "authenticated_full_access" on memory
+    for all to authenticated using (true) with check (true);
+
+drop policy if exists "authenticated_full_access" on image_cache;
+create policy "authenticated_full_access" on image_cache
+    for all to authenticated using (true) with check (true);

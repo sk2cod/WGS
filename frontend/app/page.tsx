@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ApiError, generateFromBrief, getDailyPicks, getTopics, pasteLink, rerollPick } from "@/lib/api";
 import type { DailyPick, DailyPicksResult, Topic } from "@/lib/api-types";
 import { saveCurrentPost } from "@/lib/session-store";
+import { supabase } from "@/lib/supabaseClient";
 import {
   cardStyle,
   colors,
@@ -87,9 +88,17 @@ export default function Home() {
 
   return (
     <main style={screenStyle}>
-      <header>
-        <div style={labelStyle}>{"Women's Growth Society"}</div>
-        <h1 style={{ fontSize: 26, marginTop: 4 }}>What should we make today?</h1>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={labelStyle}>{"Women's Growth Society"}</div>
+          <h1 style={{ fontSize: 26, marginTop: 4 }}>What should we make today?</h1>
+        </div>
+        <button
+          style={{ ...ghostButtonStyle, padding: "6px 0" }}
+          onClick={() => supabase.auth.signOut()}
+        >
+          Sign out
+        </button>
       </header>
 
       {picksError && <ErrorBanner message={picksError} />}
