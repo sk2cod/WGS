@@ -644,6 +644,37 @@ conclusion (two successes) was not enough.
 
 ---
 
+## 21. Two safety fixes applied for #20, not yet deployed
+
+**`build.watchPatterns: ["/backend/**"]`** added to `backend/railway.json` —
+scopes Railway's auto-deploy trigger to actual backend changes, so a
+docs-only commit (exactly what caused #20) can no longer trigger a backend
+rebuild at all. Confirmed via Railway's live `railway.schema.json` (fetched
+directly, not assumed) and its own docs that `watchPatterns` are
+**repo-root-relative even when Root Directory is set** — a bare
+`"backend/**"` without the leading slash, or assuming root-directory
+relativity, would have been silently wrong.
+
+**`deploy.healthcheckPath: "/topics"` + `healthcheckTimeout: 60`** also
+added — makes Railway verify a new deployment actually responds before
+routing production traffic to it, instead of cutting over the instant the
+build succeeds. This is the direct fix for #20's actual failure mode (build
+succeeded, runtime crashed, traffic still cut over) — a crashing container
+should now get caught before it ever goes live, falling back to "keep
+serving the last good deployment," matching the safe behavior already seen
+on every build-*time* failure.
+
+Both confirmed as valid JSON and against the schema; full test suite still
+111/111. **Committed locally only, deliberately not pushed** — pushing is
+itself a live deploy trigger against production right now, and verifying
+these two fixes are correct before the next one happens is the entire
+point.
+
+**Not a blueprint deviation** — infrastructure hardening in direct response
+to #20.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
