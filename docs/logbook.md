@@ -412,6 +412,51 @@ or design change.
 
 ---
 
+## 17. Neither Vercel nor Railway auto-deploy on push — confirmed, and #16 manually deployed
+
+**Investigated on request, not a reported bug:** checked whether pushing to
+`main` actually triggers a deployment on either platform, since #16 (the
+`knowledge_hints` type fix) had been pushed but its deployment status
+wasn't obvious.
+
+**Vercel:** `vercel project inspect wgs` shows no "Git Repository" /
+"Connected Repository" section at all — a project with GitHub auto-deploy
+would list the connected repo and production branch there. `vercel git ls`
+isn't even a real command (only `connect`/`disconnect` exist). `vercel ls`
+showed the most recent deployment sitting 5 hours stale relative to the
+`#16` push, and `vercel inspect` on it carried no git/commit metadata.
+Confirmed: every Vercel deployment in this project's history has come from
+a manual `vercel --prod` CLI run.
+
+**Railway:** `railway status --json` on the active deployment shows
+`"source": null` at the service level (no repo connected) and deployment
+metadata of `"cliCaller": "claude_code"`, `"reason": "deploy"` — explicit
+CLI-trigger fingerprints, not a webhook. Commit `92860c3` (fix #14) was
+pushed at `14:53:08`, squarely inside a ~15-hour gap in the deployment
+history (`00:19:38` → `15:13:54`) with zero deploy activity — conclusive
+that the push itself triggered nothing. The deployment that eventually
+shipped #14+#15 together only happened because of a manual `railway up`
+run afterward, coincidentally close in time to both pushes.
+
+**Consequence — a standing operational fact, not a bug:** every fix in
+this project needs an explicit manual deploy step (`railway up
+--service wgs-backend` for backend changes, `vercel --prod --yes` from
+`frontend/` for frontend changes) after pushing. A merged/pushed commit is
+not live until that manual step happens — confirmed concretely by #16
+sitting un-deployed for the time between its push and this investigation.
+
+**Then deployed #16:** ran `vercel --prod --yes` from `frontend/` on commit
+`42a23f2`. Deployment `dpl_5W7JgiNQHL2vUTcXBpZM2Bs4Hw6C` — `READY`,
+`target: production`. Verified both canonical domains
+(`wgs-studio.vercel.app`, `wgs-two.vercel.app`) serving `200` afterward.
+
+**Not a blueprint deviation** — an infrastructure/tooling characteristic,
+not a design decision. Worth keeping in mind as a standing operational
+fact for every future fix, though: `CLAUDE.md` may be worth a note on this
+if it keeps causing confusion about whether a pushed fix is actually live.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
