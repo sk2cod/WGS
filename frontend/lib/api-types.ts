@@ -43,6 +43,10 @@ export interface ContentBrief {
   requires_citation: boolean;
   sensitivity: Sensitivity;
   sources: Source[];
+  // Grounding for requires_citation topics with no pinned Source objects (i.e.
+  // everything except the paste-link flow) — mirrors backend/app/models/brief.py
+  // (fix #14, docs/logbook.md).
+  knowledge_hints: string[];
   hero_image_prompt: string;
   max_words_per_slide: number;
 }

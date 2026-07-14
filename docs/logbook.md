@@ -375,6 +375,43 @@ completing that fix, not a new departure from the design docs.
 
 ---
 
+## 16. Follow-up to #14: frontend `ContentBrief` type left out of sync with the backend
+
+**Symptom (self-identified during a read-only frontend audit for the same
+class of drift, not separately reported):** the #14 fix added
+`knowledge_hints: list[str] = []` to the backend's `ContentBrief` Pydantic
+model (`backend/app/models/brief.py`), but only backend files were touched
+in that fix — `frontend/lib/api-types.ts`'s `ContentBrief` interface was
+never updated to match, leaving it silently out of sync with the real wire
+contract.
+
+**Investigated first, before assuming it was a bug:** checked every place
+the frontend sends a `ContentBrief` back to the backend
+(`regenerateSlide`/`reshuffleImage` in `editor/page.tsx`, `generateFromBrief`
+in the paste-link flow) — all of them pass through the exact object the
+backend originally returned; the frontend never independently constructs a
+`ContentBrief`. `lib/api.ts`'s `request()` helper does a raw `res.json() as
+Promise<T>` with no field-stripping transform. Confirmed: no functional
+drift bug, since TypeScript interfaces are erased at compile time and
+`knowledge_hints` was round-tripping correctly through every
+`JSON.stringify` call regardless of what the type declared — a
+type-contract gap, not a runtime one. Also checked backend `regenerate_slide()`
+(the one other text-generation path the frontend triggers) — it calls the
+same shared `_brief_system_prompt()` fixed in #14, no separate citation
+logic to have missed.
+
+**Fix:** added `knowledge_hints: string[]` to the `ContentBrief` interface in
+`frontend/lib/api-types.ts`, matching the backend model. Type-only change —
+confirmed via `pnpm build` (clean compile, zero TypeScript errors) that
+nothing in the codebase constructs a `ContentBrief` object literal that
+would now be missing a required field; every consumer passes an existing
+object through unmodified.
+
+**Not a blueprint deviation** — a type-contract correction, not a behavior
+or design change.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
