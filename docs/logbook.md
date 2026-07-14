@@ -457,6 +457,65 @@ if it keeps causing confusion about whether a pushed fix is actually live.
 
 ---
 
+## 18. Attempting to replace manual deploys with GitHub auto-deploy — partial success, Railway build actively failing until root directory is set
+
+**Goal (requested on top of #17's finding):** connect the GitHub repo to
+both Vercel and Railway for real auto-deploy-on-push, retiring the manual
+`vercel --prod` / `railway up` workflow.
+
+**Vercel — failed, needs one-time browser authorization.** `vercel git
+connect` (both with an explicit repo URL and auto-detected from the local
+remote) failed immediately: `"Failed to connect sk2cod/WGS to project...
+Make sure... you have access to the repository if it's private."` The repo
+is confirmed public via the GitHub API, ruling out a repo-visibility cause
+— this means the "Vercel" GitHub App has never been installed/authorized on
+the `sk2cod` GitHub account. That's an OAuth/App-installation step tied to
+a browser session; no CLI path exists to complete it. Connection not made.
+
+**Railway — connected via CLI, but the resulting auto-build immediately
+failed.** `railway service source connect --repo sk2cod/WGS --branch main
+--service wgs-backend` succeeded cleanly with no OAuth prompt (Railway's
+GitHub App access was apparently already sufficient for this public repo).
+Connecting a source triggers an immediate build per Railway's own CLI
+documentation, and it did — deployment `ecb97538...` **FAILED**:
+```
+✖ Railpack could not determine how to build the app.
+./
+├── .claude/  ├── backend/  ├── docs/  ├── frontend/  ├── .gitignore  ├── CLAUDE.md  └── DEPLOY.md
+```
+Railpack scanned the repo root (this is a monorepo — `backend/` has the
+actual FastAPI app) and found nothing it recognized. **No user-facing
+impact** — Railway doesn't tear down a working deployment on a failed
+build, so the service stayed `Online`, still serving the last successful
+manual deploy (`569d412a`).
+
+**Root directory has no CLI path on either platform.** Checked
+`vercel project update --help` in full — build/dev/install-command,
+output-directory, framework are all settable, Root Directory is not.
+Checked `railway service source connect --help` — no such flag. The only
+other Railway path found (`railway config` / `.railway/railway.ts`, an IaC
+config system) requires installing a separate `railway-ts-sdk` package
+first — real added scope beyond what was asked, not pursued. **Both
+platforms require the dashboard for this one setting**: Vercel → Settings →
+General → Root Directory → `frontend`; Railway → Service → Settings →
+Source → Root Directory → `backend`.
+
+**Current state, left intentionally incomplete pending dashboard action:**
+Railway's GitHub connection is live and **will fail on every push to
+`main`** until Root Directory is set there. Vercel's connection was never
+established at all. Explicitly told not to test auto-deploy yet — a test
+plan (empty commit + push, then check `vercel ls` / `railway deployment
+list` for a real git-sourced deployment) was given for after both dashboard
+steps are done, not before.
+
+**Not a blueprint deviation** — infrastructure setup in progress, not a
+completed characteristic of the system yet. Revisit this entry once both
+platforms are confirmed working, since right now Railway is in a
+partially-configured, actively-failing state that a future session
+shouldn't mistake for "done."
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
