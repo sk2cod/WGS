@@ -1,4 +1,3 @@
-import { ImageResponse } from "@vercel/og";
 import type { NextRequest } from "next/server";
 import { loadSlideFonts } from "@/lib/fonts";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas";
@@ -52,7 +51,6 @@ export async function POST(req: NextRequest) {
   }
 
   const content = slides[0];
-  const fonts = await loadSlideFonts();
 
   let element: React.ReactElement;
   switch (template_id) {
@@ -99,9 +97,19 @@ export async function POST(req: NextRequest) {
       return badRequest(`unknown template_id: ${template_id}`);
   }
 
-  return new ImageResponse(element, {
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
-    fonts,
-  });
+  try {
+    const { ImageResponse } = await import("@vercel/og");
+    const fonts = await loadSlideFonts();
+    return new ImageResponse(element, {
+      width: CANVAS_WIDTH,
+      height: CANVAS_HEIGHT,
+      fonts,
+    });
+  } catch (err) {
+    console.error("render failed:", err);
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+      { status: 500, headers: { "content-type": "application/json" } },
+    );
+  }
 }
