@@ -232,6 +232,101 @@ Since the two lanes run in parallel (`asyncio.gather`), total request time is `m
 
 ---
 
+## 14. Citation-required taxonomy topics silently rewriting content away from the accepted angle
+
+**Symptom:** user accepted a Myth vs Fact angle about Rosa Parks (topic
+`inspiring-women-who-changed-history`, correcting the "tired feet" myth with
+her NAACP training), tapped Generate, and the returned post had no
+resemblance to the accepted angle — approach label and masthead survived
+unchanged, but every piece of substance (slides, caption) had pivoted to an
+unrelated scenario (a Slack reply to a manager). Reported for one topic, but
+suspected wider given the mechanism found below.
+
+**Investigation:** traced the request end-to-end. Confirmed the frontend
+passes the exact accepted angle/approach/mood/visual_subject through to
+`/generate` unmodified (`frontend/app/generate/page.tsx`), and confirmed the
+backend uses it as-is with no resampling or retry logic anywhere in
+`routes/generate.py`, `angle_engine.py`, or `validator.py` — validation
+failures are attached to the response as `validation_errors` but never
+trigger a second generation. The actual mechanism was in the prompt itself:
+`inspiring-women-who-changed-history` has `requires_citation: true`, but
+`ContentBrief.sources` is unconditionally `[]` for the normal taxonomy
+`/generate` flow (real `Source` objects only ever get attached via the
+separate paste-link flow — no mechanism existed to attach curated sources to
+a taxonomy topic). `_brief_system_prompt()` (generator.py) built a "must be
+traceable to these sources" instruction that resolved to the literal string
+"...none" when the source list was empty, and `critique_post()` carried a
+second, separate instruction to independently verify traceability to the
+same non-existent sources. Live repro with temporary debug logging on
+`draft_post`/`critique_post`/`refine_post` output confirmed `critique_post()`
+explicitly named citation/traceability as a "critical failure" and the
+stated reason to rewrite the post.
+
+A full scan of `topics.yaml` found 11 of 18 current topics (61%) carry
+`requires_citation: true` — this is a systemic condition, not unique to the
+one reported topic. Also found that `knowledge_hints` (authored per-topic,
+and per its own inline comment intended to keep exactly this kind of content
+honest — "biographical facts must be sourced — never invented from memory")
+is used only by the cheap-tier angle-sampling call in `angle_engine.py` and
+never reaches `ContentBrief` or any of the Sonnet-tier prompts — the one
+mechanism that could have prevented this was silently dropped after
+angle-sampling.
+
+**Root cause:** a structural contradiction for any `requires_citation: true`
+taxonomy topic — the prompt demands traceability to a source list that
+never gets populated outside the paste-link flow, and no fallback grounding
+was ever wired to the writing/critique stage.
+
+**Fix:** `knowledge_hints` added to `ContentBrief` and threaded through from
+`brief_builder.py`. `_brief_system_prompt()` and `critique_post()`'s citation
+instructions now branch: real source-traceability language only when
+`brief.sources` is actually populated (paste-link case, unchanged); a new
+knowledge_hints-grounded instruction otherwise — stay within well-established
+public knowledge, don't fabricate specific numbers/studies/quotes/dates,
+describe patterns qualitatively when unsure of an exact figure. A startup
+validation check now fails loudly if any topic has `requires_citation: true`
+with empty `knowledge_hints`, so this bug class can't silently recur as the
+catalog grows toward 40-60 topics.
+
+**Verified live, before/after:** re-ran the exact Rosa Parks/NAACP Myth vs
+Fact scenario end-to-end post-fix. Before the fix, `critique_post` called the
+citation gap a "critical failure" and said "the entire premise of the post is
+unsupportable as written" — and `refine_post` abandoned the accepted angle
+for an unrelated scenario. After the fix, `critique_post` ran a "Fabricated
+specifics check" instead, flagged only one soft claim ("chapter secretary for
+over a decade" — an unverifiable specific duration) and explicitly called the
+gendered content "specific, not generic" and the myth/fact structure
+"delivered correctly." `refine_post` kept the Rosa Parks/NAACP content fully
+intact and applied exactly that one surgical correction ("for over a decade"
+→ "for years before that day"), with no pivot away from the accepted angle
+anywhere in the pipeline.
+
+**Considered and explicitly rejected:** hand-curating real pinned sources
+(title/URL/excerpt) for all 11 affected topics — real research was actually
+done for 10 of them (Pew Research, WHO, ACOG, IWPR/American Time Use Survey,
+Fraley's attachment-theory overview, among others) before this direction was
+reconsidered. Rejected because it solves a problem the product doesn't
+actually have: the citation requirement's real purpose is stopping the model
+from fabricating specifics with false confidence, not giving IG readers a
+footnote trail nobody will check. Curating real sources per topic would also
+not scale cleanly to 40-60 topics without becoming a standing authoring
+burden. Also considered and rejected: a human-verify checkpoint gating
+export for health/timely content, per blueprint Section 8 — confirmed
+unnecessary since the existing preview → swipe-edit → export-to-camera-roll
+→ manual-IG-post flow already functions as human review for every post, not
+only health ones.
+
+**Not a blueprint deviation** — this is a stricter-to-the-actual-intent
+reading of Section 8's "never cite from memory" principle, not a departure
+from it. The literal original implementation was producing a contradictory,
+non-functional prompt rather than the grounding behavior the principle
+actually called for; this fix makes the mechanism do what it was always
+meant to do. Worth noting as a scope clarification: "citation" in this
+codebase now means model-facing factual grounding, not reader-facing source
+attribution — the two were conflated in the original design language.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |

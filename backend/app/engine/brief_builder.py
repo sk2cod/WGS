@@ -79,6 +79,7 @@ def build_brief(
         requires_citation=topic.requires_citation,
         sensitivity=topic.sensitivity,
         sources=[],
+        knowledge_hints=topic.knowledge_hints,
         hero_image_prompt=_hero_image_prompt(visual_subject or angle, mood),
     )
 

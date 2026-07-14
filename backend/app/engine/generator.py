@@ -233,18 +233,46 @@ def _parse_post(raw: str, roles: list[SlideRole], brand_kit: BrandKit) -> Genera
     )
 
 
+def _citation_mode(brief: ContentBrief) -> str:
+    """Which grounding a requires_citation brief actually has to work with: real
+    pinned Source objects (paste-link flow only) get source-traceability language;
+    everything else (every taxonomy topic — ContentBrief.sources is always [] there)
+    falls back to knowledge_hints-based grounding. If a brief somehow has neither,
+    there's nothing safe to instruct against, so no citation block is emitted at all
+    — the topics.yaml startup loader (taxonomy/loader.py) is what should actually
+    prevent this case from arising."""
+    if not brief.requires_citation:
+        return "none"
+    if brief.sources:
+        return "sources"
+    if brief.knowledge_hints:
+        return "knowledge_hints"
+    return "none"
+
+
 def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[SlideRole]) -> str:
     voice_lines = "\n".join(f"- {s}" for s in brief.brand_voice_samples)
     forbidden = ", ".join(brand_kit.forbidden) or "none"
 
     citation_block = ""
-    if brief.requires_citation:
+    citation_mode = _citation_mode(brief)
+    if citation_mode == "sources":
         source_lines = "\n".join(
             f"- {s.title} ({s.url or 'no url'}): {s.excerpt}" for s in brief.sources
-        ) or "none"
+        )
         citation_block = (
             "This post REQUIRES citation — every factual claim must be traceable to "
             f"these sources, never invented from memory:\n{source_lines}\n"
+        )
+    elif citation_mode == "knowledge_hints":
+        hints = "; ".join(brief.knowledge_hints)
+        citation_block = (
+            "This post touches on factual claims. Stay within well-established, "
+            f"widely-known public knowledge on this: {hints}. Do not invent a "
+            "specific number, named study, quote, date, or precise statistic you "
+            "are not confident is real — if unsure of an exact figure, describe "
+            "the pattern qualitatively rather than citing a precise stat you "
+            "can't verify.\n"
         )
 
     kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
@@ -300,14 +328,25 @@ def critique_post(
 ) -> str:
     roles = slide_roles_for(brief)
     system = _brief_system_prompt(brief, brand_kit, roles)
-    citation_instruction = (
-        "This post requires citation — separately verify that every factual claim in "
-        "the draft is directly traceable to the sources given above, and flag any claim "
-        "that isn't (nothing invented from memory, no drifting beyond what the sources "
-        "actually say). "
-        if brief.requires_citation
-        else ""
-    )
+    citation_mode = _citation_mode(brief)
+    if citation_mode == "sources":
+        citation_instruction = (
+            "This post requires citation — separately verify that every factual claim in "
+            "the draft is directly traceable to the sources given above, and flag any claim "
+            "that isn't (nothing invented from memory, no drifting beyond what the sources "
+            "actually say). "
+        )
+    elif citation_mode == "knowledge_hints":
+        citation_instruction = (
+            "Separately verify the draft doesn't invent a specific number, named study, "
+            "quote, date, or precise statistic beyond well-established public knowledge — "
+            "flag anything that reads as a confident, specific figure that isn't safely "
+            "verifiable. This is about fabricated specifics, not about the post's actual "
+            "angle or premise — don't flag a claim just for being unsourced if it's "
+            "well-established public knowledge. "
+        )
+    else:
+        citation_instruction = ""
     kicker_instruction = (
         "Separately check whether the cover slide's kicker reads as a natural sentence "
         "with concrete, disambiguating detail — not a label or a restated topic/category "

@@ -36,6 +36,13 @@ def load_topics(path: Path = TOPICS_YAML_PATH) -> list[Topic]:
         if topic.id in seen_ids:
             errors.append(f"duplicate topic id '{topic.id}'")
         seen_ids.add(topic.id)
+        if topic.requires_citation and not topic.knowledge_hints:
+            errors.append(
+                f"topic '{topic.id}': requires_citation is True but knowledge_hints is "
+                "empty — the generator has nothing to ground factual claims against "
+                "outside the paste-link flow, which reintroduces the contradictory-prompt "
+                "bug (logbook #14). Add at least one knowledge_hints entry."
+            )
 
         topics.append(topic)
 

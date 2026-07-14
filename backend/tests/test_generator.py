@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -10,6 +11,7 @@ from app.engine.generator import (
     regenerate_slide,
     slide_roles_for,
 )
+from app.models.brief import ContentBrief, Source
 from app.models.enums import Approach, Format
 from app.models.post import (
     BodySlide,
@@ -181,21 +183,67 @@ def _sample_draft() -> GeneratedPost:
     )
 
 
-def test_critique_asks_for_citation_check_when_required():
+def test_critique_asks_for_knowledge_hints_check_when_required_without_sources():
+    """Logbook #14: taxonomy topics (career-salary-negotiation has knowledge_hints,
+    ContentBrief.sources is always [] here) must get knowledge_hints-grounded
+    critique language, not the source-traceability instruction — there are no
+    sources to trace to outside the paste-link flow, and asking for that
+    produced a contradictory prompt that rewrote accepted angles away."""
     llm = _QueueLLM(["no changes needed"])
     draft = GeneratedPost(
         slides=[StatSlide(kicker="Did you know", number="42%", supporting_line="a stat")],
         caption="a caption",
         hashtags=["#a"],
     )
-    critique_post(_citation_required_brief(), WGS_BRAND_KIT, draft, llm)
+    brief = _citation_required_brief()
+    assert brief.sources == []
+    assert brief.knowledge_hints
+    critique_post(brief, WGS_BRAND_KIT, draft, llm)
+    assert "traceable to the sources" not in llm.prompts[0]
+    assert "well-established public knowledge" in llm.prompts[0]
+
+
+def test_critique_asks_for_source_traceability_when_sources_present():
+    """The paste-link flow (real pinned Source objects) keeps the original
+    traceability instruction unchanged — only the sourceless taxonomy case
+    changes behavior."""
+    llm = _QueueLLM(["no changes needed"])
+    draft = GeneratedPost(
+        slides=[StatSlide(kicker="Did you know", number="42%", supporting_line="a stat")],
+        caption="a caption",
+        hashtags=["#a"],
+    )
+    brief = ContentBrief(
+        topic_id="paste-link:abc123",
+        topic_name="A Test Article",
+        angle="an angle grounded in the article",
+        approach=Approach.STAT_RESEARCH,
+        goal="inform",
+        format=Format.SINGLE_IMAGE,
+        slide_count=1,
+        tone=["warm"],
+        brand_voice_samples=["a"],
+        requires_citation=True,
+        sources=[
+            Source(
+                title="A Test Article",
+                url="https://example.com/a",
+                excerpt="a citable excerpt",
+                retrieved_at=datetime.now(timezone.utc),
+            )
+        ],
+        hero_image_prompt="a prompt",
+    )
+    critique_post(brief, WGS_BRAND_KIT, draft, llm)
     assert "traceable to the sources" in llm.prompts[0]
+    assert "well-established public knowledge" not in llm.prompts[0]
 
 
 def test_critique_omits_citation_check_when_not_required():
     llm = _QueueLLM(["no changes needed"])
     critique_post(_sample_brief(), WGS_BRAND_KIT, _sample_draft(), llm)
     assert "traceable to the sources" not in llm.prompts[0]
+    assert "well-established public knowledge" not in llm.prompts[0]
 
 
 def test_critique_checks_kicker_clarity_only_when_cover_present():

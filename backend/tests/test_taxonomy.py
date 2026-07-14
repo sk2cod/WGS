@@ -74,3 +74,25 @@ def test_load_topics_rejects_mismatched_primary_category(tmp_path):
     )
     with pytest.raises(ValueError, match="not present in categories"):
         load_topics(bad_yaml)
+
+
+def test_load_topics_rejects_citation_required_without_knowledge_hints(tmp_path):
+    """Logbook #14: requires_citation with no knowledge_hints and no pinned Source
+    objects is a contradictory prompt (nothing to ground factual claims against) —
+    the loader must fail loudly rather than let this recur as topics.yaml grows."""
+    bad_yaml = tmp_path / "bad_topics.yaml"
+    bad_yaml.write_text(
+        """
+- id: broken
+  name: Broken Topic
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm"]
+  suitable_formats: ["carousel"]
+  seed_angles: ["a", "b", "c"]
+  requires_citation: true
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="knowledge_hints is empty"):
+        load_topics(bad_yaml)
