@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from app.engine.brief_builder import build_brief
 from app.engine.validator import validate_post
+from app.models.brief import ContentBrief, Source
 from app.models.enums import Approach, Format
 from app.models.memory import MemoryRecord
 from app.models.post import BodySlide, GeneratedPost
@@ -60,15 +61,75 @@ def test_validate_post_flags_word_limit():
     assert any("exceeds max_words_per_slide" in e for e in result.errors)
 
 
-def test_validate_post_flags_missing_citation():
+def test_validate_post_passes_citation_required_topic_grounded_by_knowledge_hints():
+    """Logbook #14: career-salary-negotiation requires_citation, but build_brief()
+    now threads topic.knowledge_hints into the brief — sources stays empty by
+    design (taxonomy topics never carry real Source objects) and that's correct,
+    not a validation failure."""
     brief = _brief(
         topic_id="career-salary-negotiation",
         approach=Approach.EDUCATIONAL,
         format=Format.SINGLE_IMAGE,
     )
+    assert brief.sources == []
+    assert brief.knowledge_hints
+    result = validate_post(brief, WGS_BRAND_KIT, _post(n_slides=1), [], "fp-5")
+    assert result.passed
+    assert not any("requires_citation" in e for e in result.errors)
+
+
+def test_validate_post_flags_citation_required_with_neither_sources_nor_hints():
+    """The real bug: a citation-required brief with no grounding at all —
+    e.g. a paste-link brief that failed to pin a Source, or a taxonomy brief
+    that somehow bypassed the startup loader guard requiring knowledge_hints."""
+    brief = ContentBrief(
+        topic_id="paste-link:abc123",
+        topic_name="A Test Article",
+        angle="an angle",
+        approach=Approach.STAT_RESEARCH,
+        goal="inform",
+        format=Format.SINGLE_IMAGE,
+        slide_count=1,
+        tone=["warm"],
+        brand_voice_samples=["a"],
+        requires_citation=True,
+        sources=[],
+        knowledge_hints=[],
+        hero_image_prompt="a prompt",
+    )
     result = validate_post(brief, WGS_BRAND_KIT, _post(n_slides=1), [], "fp-5")
     assert not result.passed
-    assert any("requires_citation" in e for e in result.errors)
+    assert any("neither sources nor knowledge_hints" in e for e in result.errors)
+
+
+def test_validate_post_passes_citation_required_with_real_sources():
+    """The paste-link flow's own success case: real pinned Source objects,
+    no knowledge_hints — still correctly grounded, still passes."""
+    brief = ContentBrief(
+        topic_id="paste-link:abc123",
+        topic_name="A Test Article",
+        angle="an angle",
+        approach=Approach.STAT_RESEARCH,
+        goal="inform",
+        format=Format.SINGLE_IMAGE,
+        slide_count=1,
+        tone=["warm"],
+        brand_voice_samples=["a"],
+        requires_citation=True,
+        sources=[
+            Source(
+                title="A Test Article",
+                url="https://example.com/a",
+                excerpt="a citable excerpt",
+                retrieved_at=datetime.now(timezone.utc),
+            )
+        ],
+        knowledge_hints=[],
+        hero_image_prompt="a prompt",
+    )
+    result = validate_post(brief, WGS_BRAND_KIT, _post(n_slides=1), [], "fp-5")
+    assert result.passed
+    assert not any("requires_citation" in e for e in result.errors)
 
 
 def test_validate_post_flags_repetition():

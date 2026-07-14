@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.engine.generator import slide_text
+from app.engine.generator import _citation_mode, slide_text
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief
 from app.models.memory import MemoryRecord
@@ -47,8 +47,18 @@ def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
 
 
 def _check_citation(brief: ContentBrief) -> list[str]:
-    if brief.requires_citation and not brief.sources:
-        return ["requires_citation is True but the brief has no sources"]
+    """Grounding for a citation-required brief comes from one of two places —
+    real pinned Source objects (paste-link flow) or Topic.knowledge_hints (every
+    other flow — logbook #14) — matching generator.py's _citation_mode(). Only
+    flag a problem when neither is present: that's the paste-link flow
+    producing a brief with no sources, the real bug this check exists to catch.
+    A knowledge_hints-mode brief with empty sources is correct by design, not
+    an error — sources are never populated outside paste-link. Empty
+    knowledge_hints on a citation-required, sourceless brief also lands here;
+    the startup loader guard (taxonomy/loader.py) should make that unreachable
+    for real topics, so seeing it means that guard was bypassed."""
+    if brief.requires_citation and _citation_mode(brief) == "none":
+        return ["requires_citation is True but the brief has neither sources nor knowledge_hints"]
     return []
 
 
