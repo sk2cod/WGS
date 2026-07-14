@@ -579,6 +579,69 @@ complete. The `NIXPACKS_UV_VERSION` pin is worth remembering as a standing
 fact: if a future `uv` upgrade is wanted, this variable needs updating
 manually, since it's now deliberately no longer auto-detected.
 
+**Correction, added after #20:** "retired for routine fixes" above was
+premature for Railway specifically — the very next push (documenting this
+entry) caused a real outage. Two clean SUCCESS builds in a row was not
+enough evidence of determinism. See #20.
+
+---
+
+## 20. Railway auto-deploy caused a real production outage — build succeeded, runtime crashed
+
+**What happened:** the docs-only commit closing out #19 (`b304278` —
+ironically, the one claiming both platforms were confirmed reliable) was
+pushed and auto-triggered a Railway build. The build succeeded cleanly:
+`uv==0.4.30` installed correctly, all 64 packages present including
+`uvicorn==0.51.0`. Because the build succeeded, Railway cut over to the new
+container — unlike every prior build-time failure in #18/#19, which left
+the working deployment running untouched. The new container then
+**crashed on start**: `uvicorn: command not found`. Production was down
+until manually recovered.
+
+**Root cause not confirmed.** The generated Dockerfile's PATH fix
+(`RUN printf '\nPATH=/opt/venv/bin:$PATH' >> /root/.profile`) only affects
+login shells; if Railway's start-command execution doesn't source
+`/root/.profile`, `uvicorn` would never be found regardless of installing
+correctly — but this exact same Dockerfile recipe had produced a *working*
+container (`4e0c2922`) only six minutes earlier, from a different commit.
+Byte-for-byte comparable build steps, different runtime outcome — the same
+*category* of non-determinism as #19's `NIXPACKS_UV_VERSION` issue, but
+this time affecting something that isn't pinnable via a simple service
+variable. Not investigated further per explicit instruction to hold off on
+more test pushes before this is understood — every push right now is a
+real deploy attempt against a live production service.
+
+**Recovery, and a second problem discovered along the way:** `railway
+redeploy` was ruled out (would only re-run the same crashed image, not
+rebuild). Tried `railway up` from `backend/` (the directory manual deploys
+had always run from throughout this session) — **that failed differently**:
+`Failed to read app source directory`. Root cause: with `Root Directory:
+backend` now configured on the service (set in #18 for the git
+integration), a manual CLI upload from *inside* `backend/` uploads that
+folder as the app root, and Railway then looks for a doubly-nested
+`backend/backend/...` that doesn't exist. This is a real, newly-introduced
+side effect of connecting the git integration — manual deploys must now
+run from the **repo root**, not `backend/`, as long as Root Directory stays
+configured. Re-ran `railway up` from the repo root — succeeded, service
+restored, confirmed `200` on `/topics`.
+
+**Immediate mitigation:** reverted the "auto-deploy is the reliable primary
+workflow, retire manual deploys" framing in `DEPLOY.md` and `CLAUDE.md`
+(written in #19, proven wrong within minutes) back to "keep using `railway
+up` for the backend" until this is root-caused, while leaving Vercel's
+auto-deploy status as reliable (no equivalent failure observed there).
+Also documented the repo-root gotcha for manual deploys in both files, since
+it's now a standing behavior change, not a one-off.
+
+**Not a blueprint deviation** — infrastructure reliability finding, not a
+design decision. **This entry supersedes #19's closing claim.** Anyone
+reading #19 alone would believe Railway auto-deploy is safe to rely on; it
+is not, as of this entry. Do not re-enable "auto-deploy is primary" framing
+for Railway without either root-causing the PATH issue or observing enough
+consecutive clean auto-deploys (through real work, not synthetic test
+pushes) to justify confidence — the sample size that led to #19's
+conclusion (two successes) was not enough.
+
 ---
 
 ## Summary — deviations from the original design docs
