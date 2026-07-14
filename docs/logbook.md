@@ -779,6 +779,69 @@ was first set. Production `curl` still `200` throughout.
 
 ---
 
+## 24. "The quota has been exceeded" on Generate — a client-side sessionStorage bug, not an LLM provider issue
+
+**Symptom:** on mobile (real device, not simulator), tapping Generate after
+accepting a proposed angle failed **every single time** with "The quota has
+been exceeded." Reported alongside explicit confirmation that both Anthropic
+and OpenAI dashboards showed available credits, ruling out the obvious
+reading of the message.
+
+**Investigation, read-only first per instruction:** a repo-wide grep found
+zero hardcoded "quota" text anywhere in the codebase — the string wasn't
+coming from any WGS error-handling path, ruling out a deliberate
+rate-limit/billing message from the app itself. Direct backend/provider
+calls (Anthropic, OpenAI) couldn't reproduce it. The user then gave a
+precise repro: Career category → "Negotiating Your Worth" (a carousel,
+therefore a real GPT Image 2 hero image) → accept → Generate → crash.
+
+**Root cause:** `frontend/lib/session-store.ts`'s `saveCurrentPost()` wrote
+the entire `/generate` response — including `hero_image_base64`, a
+multi-MB base64-encoded string — into `sessionStorage.setItem()` with no
+try/catch. Mobile Safari enforces a much smaller per-origin storage quota
+than desktop browsers; writing a multi-MB string past it throws a real,
+uncaught `QuotaExceededError` DOMException, whose exact WebKit message text
+is "The quota has been exceeded." This happens *after* the Anthropic/OpenAI
+calls have already succeeded — the error is a pure client-side storage
+failure surfacing through the UI's generic error handling, unrelated to any
+provider's actual quota or billing state. Desktop browsers' larger quotas
+had masked this throughout development.
+
+**Fix:** `hero_image_base64` no longer goes into `sessionStorage` at all —
+it's held in an in-memory module-level variable (`cachedHeroImage`) instead.
+`saveCurrentPost()` writes the rest of the response (text-only, small) to
+`sessionStorage` with the hero field explicitly nulled out; `loadCurrentPost()`
+reassembles the full object by splicing the in-memory value back in. The
+`sessionStorage.setItem()` call is also now wrapped in try/catch (covers the
+remaining edge case of an already-near-full quota, e.g. Safari Private
+Browsing's ~0 effective quota) — degrades to in-memory-only rather than
+crashing. Tradeoff, accepted: the hero image is lost on a hard page reload
+mid-flow (module state doesn't survive that), where before this fix the flow
+never completed at all on mobile Safari.
+
+**Verified in a real browser (Playwright), not just a clean build:** ran the
+full login → browse → accept angle → Generate → editor → export flow
+against a local dev stack (dev server + local backend, to avoid CORS from
+hitting production's `FRONTEND_ORIGIN` allowlist). Confirmed: (1) the flow
+completes with zero console errors, where it previously crashed at Generate;
+(2) the hero image genuinely renders in both the editor and export screens
+(visually confirmed via screenshot — an automated `<img src="data:...">` DOM
+check returned a false negative, since `SlideRenderer` paints the hero as a
+CSS background rather than an `<img>` tag, not a real absence); (3)
+`sessionStorage`'s `wgs-current-post` key is now 2687 bytes with
+`hero_image_base64: null` explicitly present, confirming the fix is actually
+taking effect and not coincidentally not crashing on this particular test
+payload.
+
+**Not a blueprint deviation** — `implementation-guide.md`'s "client holds
+the brief" round-trip pattern (used elsewhere for
+`/generate/regenerate-slide` and `/generate/reshuffle-image`) is unchanged;
+this only narrows *where* the hero image specifically lives during that
+round-trip, since the original design didn't anticipate mobile Safari's
+storage ceiling.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
