@@ -1,14 +1,108 @@
-# Logbook — Phase 6 deployment & post-deploy fixes
+# Logbook — full build history, issues, and design deviations
 
-Change log of every issue reported after Phase 6 (Deployment) went live, what actually
-broke, how it was fixed, and where the fix deviates from `blueprint.md` /
-`implementation-guide.md`. Written after the fact from the deployment session — treat
-`CLAUDE.md`'s "Working notes" as the current operating rules; this file is the history
-of how we got there.
+Change log covering every phase of the build: what was implemented, every issue
+reported along the way, how each was fixed, and where the result deviates from
+`blueprint.md` / `implementation-guide.md`. Treat `CLAUDE.md`'s "Working notes" /
+"Environment" sections as the current operating rules; this file is the history of
+how we got there.
+
+Reconstructed from git history (`git log`) plus the live deployment session —
+commit messages for the earlier phases were already detailed, so entries 1–4 are a
+faithful translation of those, not a reinterpretation.
 
 ---
 
-## 1. Initial Phase 6 deployment
+## 1. Phases 1–2 — design foundation and data spine
+
+Built exactly to `implementation-guide.md` Section 10: the five locked slide
+templates (`Masthead`, `CarouselCover`, `CarouselBody`, `CarouselClosing`,
+`SingleQuote`, `SingleStat`), the three duotone moods, `/api/render` via
+`@vercel/og`, the `/preview` grid, and the Pydantic contracts + authored taxonomy
+(`topics.yaml`, `approaches.py`, `entry_points.py`, `voice_register.py`).
+
+**No deviations** — this phase is straightforward scaffolding matching the spec.
+
+---
+
+## 2. Phases 3–5 — generation, surfaces, mobile flow (initial build)
+
+Built per Section 10: the tiered LLM/image providers, `angle_engine.py` (sample
+sub-concept × approach × entry-point), `generator.py` (draft → critique → refine),
+`validator.py`, `memory.py` (file-backed at this point — Supabase wiring was
+explicitly deferred, see #9), the daily-picks selector, paste-link/awareness-calendar
+sources, and the mobile screens (home → generate → editor → export).
+
+**No deviations at this point** — the two refinements below happened afterward, as
+real generated output revealed problems the spec couldn't have anticipated without
+seeing it.
+
+---
+
+## 3. Design refinement: carousel body content was landing in the caption, not the slides
+
+**Problem found:** the original `carousel_body` slide shape (`statement_pre` /
+`statement_script` /`statement_post` — a single sentence with one emphasized phrase)
+never had room for real substance. For approaches that need to actually teach
+something (`story`, `educational`, `framework`, `myth_vs_fact`, `common_mistakes`),
+the generator was compensating by dumping the real content into the caption as a
+paragraph — leaving the slides themselves thin and the caption doing work it was
+never meant to do.
+
+**Fix — a sixth slide template, `carousel_body_teaching`:** approaches needing real
+teaching room now get **two** `carousel_body_teaching` slides (1–2 full sentences of
+actual substance each — heading + body) instead of one `carousel_body` fragment.
+Which shape a post gets is decided once, at brief-build time
+(`TEACHING_BODY_APPROACHES` in `taxonomy/approaches.py`), so slide count stays
+consistent through validation. Added end-to-end on the frontend too: types,
+`/api/render` case, `SlideRenderer`, the `/preview` grid.
+
+**Also layered into the generation prompts in the same pass** (`generator.py`):
+- A real structural definition per approach (`_APPROACH_DEFINITIONS`) — previously a post could be labeled `framework` without its content actually delivering a framework's shape.
+- Kicker discipline: must disambiguate the topic through a natural sentence, never degrade into a taxonomy label (e.g. never "Career — Salary Negotiation").
+- Peer-to-peer active voice, everyday concrete specificity, practical actionability, and judgment-based "saveability" (a reusable takeaway, only when the topic genuinely has one to give).
+- **Caption discipline**: the caption's job is a hook, optionally one added closing thought — never a restatement of slide content. `critique_post` now checks all of the above, not just voice/tone/length.
+
+**Deviation:** `implementation-guide.md`'s locked Phase 1 design spec names exactly
+five slide templates (`CarouselCover`, `CarouselBody`, `CarouselClosing`,
+`SingleQuote`, `SingleStat`). `CarouselBodyTeaching` is a sixth, added after the
+fact because the original `CarouselBody` shape structurally couldn't hold what
+several approaches needed to say. `CarouselBody` itself still exists and is still
+used for the approaches that only need a single emphasized statement —
+`checklist`, `stat_research`, and `question_reflection`.
+
+---
+
+## 4. Design refinement: hero images were generic and topic-disconnected
+
+**Problem found:** `hero_image_prompt` was built from the full multi-sentence
+angle text. Image models can't visually translate an argument, so this produced
+generic abstract clichés (stairs, winding paths) with no real connection to the
+specific topic.
+
+**Fix — `visual_subject`:** the same cheap-tier LLM call that already produces
+`angle`/`mood`/`reason` in `angle_engine.py` now also produces `visual_subject` in
+the same response (bundled — no added API cost for the main angle-engine path):
+5–15 words naming one concrete, photographable image/object/scene genuinely tied to
+the specific topic and angle — never an abstract mood word ("transformation",
+"growth") and never a stock-photo trope (a staircase, a winding path).
+`hero_image_prompt` is now built from `visual_subject` via a shared
+`_hero_image_prompt()` helper, threaded through `propose → accept → generate` so the
+real production flow benefits, not just direct calls. Also fixed a string-quoting
+bug this surfaced (raw text nested inside manually-added quotes broke on
+apostrophes already present in the source text).
+
+Paste-link briefs (`sources/paste_link.py`) don't go through the angle engine at
+all, so they got the same fix via a **separate, real added cost**: a new cheap-tier
+call that grounds `visual_subject` in the article's title and excerpt instead of
+the bare headline.
+
+**Not a locked-spec deviation** — `hero_image_prompt` was always going to need some
+grounding strategy; the blueprint didn't specify one, so this is filling a gap
+rather than contradicting a decision.
+
+---
+
+## 5. Phase 6 — initial deployment
 
 **What was built, exactly per `implementation-guide.md` Section 10:**
 - Backend deployed to Railway (project `wgs-backend`), `uvicorn app.main:app` via `railway.json`.
@@ -17,13 +111,13 @@ of how we got there.
 - Supabase schema created: `brand_kit`, `memory`, `image_cache` tables + `heroes` Storage bucket (`backend/app/db/schema.sql`), plus `backend/app/db/supabase.py` (client + queries) and `frontend/lib/supabaseClient.ts`.
 - `DEPLOY.md` written documenting the click-path.
 
-**Deviation — domain naming:** the guide didn't anticipate the requested project name (`wgs`) being available as a Vercel project but not as a bare `wgs.vercel.app` subdomain (`.vercel.app` names are global across all Vercel users, independent of per-account project names). Vercel auto-assigned `wgs-two.vercel.app` as the project's default domain; `wgs-studio.vercel.app` was separately registered as a proper project domain to serve as the clean canonical URL. Both domains exist and both matter — see #6.
+**Deviation — domain naming:** the guide didn't anticipate the requested project name (`wgs`) being available as a Vercel project but not as a bare `wgs.vercel.app` subdomain (`.vercel.app` names are global across all Vercel users, independent of per-account project names). Vercel auto-assigned `wgs-two.vercel.app` as the project's default domain; `wgs-studio.vercel.app` was separately registered as a proper project domain to serve as the clean canonical URL. Both domains exist and both matter — see #10.
 
 **Deviation — Vercel deployment protection:** new Vercel projects default to SSO/authentication protection on non-custom domains, which would have blocked the creator from ever loading the app on her phone. Disabled via `vercel project protection disable wgs --sso` — not mentioned in the guide since it predates this Vercel account default.
 
 ---
 
-## 2. Railway env vars only partially applied
+## 6. Railway env vars only partially applied
 
 **Symptom:** after the first backend deploy, only `FRONTEND_ORIGIN` was actually set on Railway — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SUPABASE_*`, and 8 other keys were silently missing, even though the push command reported success for all of them.
 
@@ -35,7 +129,7 @@ of how we got there.
 
 ---
 
-## 3. `/generate` intermittently 500ing with `JSONDecodeError`
+## 7. `/generate` intermittently 500ing with `JSONDecodeError`
 
 **Symptom:** `POST /generate` (the strong-tier, Sonnet-driven path) failed roughly 1 in 3 calls with `json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)` in `_parse_post`. The cheap-tier `/generate/propose` (Haiku) never failed.
 
@@ -47,7 +141,7 @@ of how we got there.
 
 ---
 
-## 4. Login screen + Row Level Security (explicit follow-up request, beyond Phase 6's written scope)
+## 8. Login screen + Row Level Security (explicit follow-up request, beyond Phase 6's written scope)
 
 `implementation-guide.md` Section 10's Phase 6 "Build" list only calls for the Supabase schema, storage bucket, and one auth user to exist — it does not call for a login UI or RLS policies. Both were added afterward on direct request:
 
@@ -59,7 +153,7 @@ of how we got there.
 
 ---
 
-## 5. Memory + Brand Kit migrated from local disk to Supabase (explicit follow-up request)
+## 9. Memory + Brand Kit migrated from local disk to Supabase (explicit follow-up request)
 
 Also beyond Phase 6's literal build list — `engine/memory.py`'s own docstring before this change said outright: *"File-backed for now — no Supabase wiring until Phase 6 — but kept behind a small store class so swapping the backing store later doesn't touch callers."* Phase 6 as literally written only asked for the schema and a typed client to exist, not for the engine to actually use them. This was completed as a follow-up migration:
 
@@ -72,9 +166,9 @@ Also beyond Phase 6's literal build list — `engine/memory.py`'s own docstring 
 
 ---
 
-## 6. Vercel domain confusion: removing `wgs-two.vercel.app` broke the dashboard
+## 10. Vercel domain confusion: removing `wgs-two.vercel.app` broke the dashboard
 
-**What happened:** asked whether `wgs-two.vercel.app` (Vercel's auto-assigned default domain, see #1) served any purpose beyond `wgs-studio.vercel.app` (the deliberately registered canonical domain). Nothing in code, CORS config, or docs referenced it, so it was removed via `vercel alias remove`.
+**What happened:** asked whether `wgs-two.vercel.app` (Vercel's auto-assigned default domain, see #5) served any purpose beyond `wgs-studio.vercel.app` (the deliberately registered canonical domain). Nothing in code, CORS config, or docs referenced it, so it was removed via `vercel alias remove`.
 
 **Symptom:** the Vercel dashboard's project Overview then showed no production domain at all, and the Deployments tab stopped highlighting any deployment as "Production" — even though the app itself kept serving fine the whole time through `wgs-studio.vercel.app` (dashboard bookkeeping and actual request routing are two separate systems in Vercel, and they diverged).
 
@@ -86,7 +180,7 @@ Also beyond Phase 6's literal build list — `engine/memory.py`'s own docstring 
 
 ---
 
-## 7. Phone report: "Load failed" on Generate
+## 11. Phone report: "Load failed" on Generate
 
 **Symptom:** tapping Generate on a real topic (carousel format) on a phone produced a generic "Load failed" — the message a mobile browser's `fetch()` throws on a genuine network-level failure (timeout/dropped connection), not a clean HTTP error response.
 
@@ -102,9 +196,9 @@ Since the two lanes run in parallel (`asyncio.gather`), total request time is `m
 
 ---
 
-## 8. "render failed for carousel_cover: 500" on Export
+## 12. "render failed for carousel_cover: 500" on Export
 
-**Symptom:** after fixing #7, generation succeeded but tapping Export failed with `render failed for carousel_cover: 500` from `lib/render-client.ts`.
+**Symptom:** after fixing #11, generation succeeded but tapping Export failed with `render failed for carousel_cover: 500` from `lib/render-client.ts`.
 
 **Investigation, ruling things out in order:**
 1. Hypothesized the ~2.86MB base64-embedded hero image was too large for `@vercel/og` / the Vercel function payload → **ruled out**: a tiny 1×1 placeholder image failed identically.
@@ -130,8 +224,9 @@ Since the two lanes run in parallel (`asyncio.gather`), total request time is `m
 
 | # | Deviation | Why |
 |---|---|---|
-| 1 | Two Vercel domains in play (`wgs-two.vercel.app` auto-assigned default + `wgs-studio.vercel.app` canonical) instead of one clean URL | `wgs.vercel.app` was already taken globally; Vercel's auto-assigned fallback can't be removed without breaking dashboard bookkeeping |
-| 4 | Login screen + RLS added | Explicit follow-up request, not in Phase 6's written "Build" list |
-| 5 | Memory/brand kit actually wired to Supabase (not just schema+client existing) | Explicit follow-up request; Phase 6 as literally written stopped short of this |
-| 7 | `IMAGE_QUALITY=low` instead of the doc's starting `medium` | The guide's own planned experiment, now run and confirmed |
-| 8 | Frontend builds with `--webpack`, not Next 16's default Turbopack | Turbopack silently drops a file `@vercel/og` needs at runtime on Vercel; webpack doesn't |
+| 3 | Sixth slide template, `CarouselBodyTeaching`, added alongside the five locked in Phase 1 | The original `CarouselBody` single-fragment shape structurally couldn't hold real teaching content for `story`/`educational`/`framework`/`myth_vs_fact`/`common_mistakes` approaches — content kept leaking into the caption instead |
+| 5 | Two Vercel domains in play (`wgs-two.vercel.app` auto-assigned default + `wgs-studio.vercel.app` canonical) instead of one clean URL | `wgs.vercel.app` was already taken globally; Vercel's auto-assigned fallback can't be removed without breaking dashboard bookkeeping |
+| 8 | Login screen + RLS added | Explicit follow-up request, not in Phase 6's written "Build" list |
+| 9 | Memory/brand kit actually wired to Supabase (not just schema+client existing) | Explicit follow-up request; Phase 6 as literally written stopped short of this |
+| 11 | `IMAGE_QUALITY=low` instead of the doc's starting `medium` | The guide's own planned experiment, now run and confirmed |
+| 12 | Frontend builds with `--webpack`, not Next 16's default Turbopack | Turbopack silently drops a file `@vercel/og` needs at runtime on Vercel; webpack doesn't |
