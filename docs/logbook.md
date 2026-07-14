@@ -327,6 +327,54 @@ attribution — the two were conflated in the original design language.
 
 ---
 
+## 15. Follow-up to #14: `validator.py`'s citation check left stale, then deployed and verified live
+
+**Symptom (self-identified while implementing #14, not separately reported):**
+`validator.py`'s `_check_citation` still read `if brief.requires_citation and
+not brief.sources: return ["requires_citation is True but the brief has no
+sources"]` after the #14 fix landed — meaning every knowledge_hints-grounded
+taxonomy post (all 11 `requires_citation: true` topics) would now generate
+correctly-grounded content but still get a false-positive
+`validation_errors` entry on every single call, since `sources` is empty by
+design for that path.
+
+**Fix:** `_check_citation` now reuses `generator.py`'s `_citation_mode()`
+helper and only flags a problem when the brief is grounded by *neither*
+mechanism (`_citation_mode(brief) == "none"`) — the real paste-link-broken
+case, or a taxonomy brief that somehow bypassed the startup loader guard
+from #14. A knowledge_hints-grounded brief with empty `sources` now passes
+cleanly, as intended.
+
+**Note on scope:** considered splitting this into two separately-firing
+checks (one for "sources expected but missing," one for "knowledge_hints
+expected but missing," per the original ask) but didn't — with no explicit
+flow tag on `ContentBrief`, both conditions reduce to the exact same
+detectable state (`not sources and not knowledge_hints`); writing them as
+two branches would mean one is always dead code. Implemented as one check,
+documented to narrate both readings.
+
+Tests added: knowledge_hints-mode passes clean, sources-mode (paste-link)
+still passes clean and unchanged, and the real "neither present" case still
+flags — with the new message text. 111/111 passing.
+
+**Deployed and verified live in production**, not just locally: pushed to
+`main` (`e2a594b`), deployed to Railway (`railway up --service
+wgs-backend`), confirmed the app started successfully (implicitly
+re-validating the #14 startup-loader guard against the real `topics.yaml`),
+then re-ran the exact Rosa Parks/NAACP Myth vs Fact scenario as a live HTTP
+call against `wgs-backend-production.up.railway.app` — `200` in 25.3s.
+Content stayed fully grounded in the accepted angle end to end (cover,
+both teaching-body slides, closing, and caption all correctly built around
+the tired-seamstress myth vs. decade-of-NAACP-organizing fact), and
+`validation_errors: []` — confirming both the #14 grounding fix and this
+`validator.py` alignment work correctly together, in production, not just
+against local repro scripts.
+
+**Not a blueprint deviation** — same classification as #14; this is
+completing that fix, not a new departure from the design docs.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
