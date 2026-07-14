@@ -16,9 +16,11 @@ AI-assisted Instagram carousel/post generator for a single creator brand (WGS). 
 - ✅ Phase 3 (Generation) — complete, verified PASS
 - ✅ Phase 4 (Surfaces) — complete, verified PASS
 - ✅ Phase 5 (Mobile flow) — complete, verified PASS
-- ✅ Phase 6 (Deployment) — complete, verified PASS. Live at https://wgs-studio.vercel.app (backend: https://wgs-backend-production.up.railway.app). Also added beyond the original Phase 6 spec: a Supabase-Auth login screen gating the whole app, and RLS policies locking brand_kit/memory/image_cache to the authenticated role.
+- ✅ Phase 6 (Deployment) — complete, verified PASS. Live at https://wgs-studio.vercel.app (backend: https://wgs-backend-production.up.railway.app).
 
-*(Update this section at the end of every phase — check off the completed one and move the ⏳ marker to the next.)*
+All six phases are done. Since Phase 6, on top of the original scope: a Supabase-Auth login screen gating the whole app + RLS on `brand_kit`/`memory`/`image_cache`; `memory`/`brand_kit` migrated off local disk to real Supabase reads/writes (survives a Railway restart, verified); a citation/grounding bug fix so `requires_citation: true` taxonomy topics stay grounded in the accepted angle instead of drifting to unrelated content (logbook #14/#15) — deployed and verified live in production. Full detail on all of this, plus every other post-deploy fix, is in `docs/logbook.md` — that's the source of truth for "what's actually happened," not this section.
+
+*(Update this section whenever status materially changes — a phase completes, or a significant post-deploy fix lands. Keep it a short orientation summary; put the real detail in the logbook.)*
 
 ---
 
