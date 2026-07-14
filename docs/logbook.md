@@ -516,6 +516,71 @@ shouldn't mistake for "done."
 
 ---
 
+## 19. GitHub auto-deploy — resolved: both platforms confirmed working end to end
+
+**Closes out #18.** Dashboard steps were completed on both platforms
+(Vercel: authorized the GitHub App, connected the repo; Railway: Root
+Directory already fixed to `backend` in #18's own dashboard pass). Re-ran
+verification from scratch rather than trusting the dashboard UI alone.
+
+**Vercel — confirmed fully working.** `vercel project inspect wgs` now
+shows Root Directory `frontend` (was `.`, the stale CLI-linking artifact
+from #18). Pushed an empty test commit (`cc5d86d`) — a new deployment
+appeared within 5 seconds, built successfully in 34s, and — the decisive
+evidence this is genuinely git-sourced and not another manual leftover —
+the alias list gained `wgs-git-main-sk2codv1.vercel.app`, a pattern Vercel
+only ever creates for git-connected projects. Both canonical domains
+(`wgs-studio.vercel.app`, `wgs-two.vercel.app`) served `200` after.
+
+**Railway — trigger worked immediately, but surfaced a second, unrelated
+build failure**, caught by the same empty-commit test:
+```
+ERROR: Invalid requirement: 'uv==': Expected end or semicolon (after name and no valid version specifier)
+```
+Root Directory was already correct this time — a genuinely new problem.
+Investigated read-only before touching anything: no `nixpacks.toml`, no
+`.python-version`, no `uv` version pin anywhere in the repo, and
+`NIXPACKS_UV_VERSION` was never set as a Railway service variable — it has
+always been 100% dependent on Nixpacks' own internal auto-detection.
+Compared the failed build's logs against the previous successful one
+(`b1d66132`, from the dashboard's own root-directory-fix rebuild): **same
+Nixpacks version (v1.41.0), byte-identical repo tree** (the failing build
+was an empty commit on top of the succeeding one's exact commit) — yet the
+generated Dockerfile's `pip install uv==$NIXPACKS_UV_VERSION` line resolved
+to a concrete version (`uv==0.4.30`) in one build and to nothing
+(`uv==`) in the other, seconds apart. This matches a known Nixpacks
+behavior: its Python provider resolves "latest uv" via a live external
+lookup (querying `astral-sh/uv`'s GitHub releases) at build-plan time
+rather than reading any pin from the repo — a call that can transiently
+fail or rate-limit, unrelated to anything in this codebase or to the git
+integration itself. The two prior successful manual `railway up` builds
+never had this pinned either; they simply got lucky on timing, which is
+exactly why it only became visible once auto-deploy started firing builds
+more often.
+
+**Fix:** set `NIXPACKS_UV_VERSION=0.4.30` as an explicit Railway service
+variable — removes the external network dependency at build time entirely,
+making the build deterministic regardless of GitHub API availability.
+Setting it triggered an immediate rebuild (`1eccc4a4`, SUCCESS). Re-verified
+properly with a fresh empty-commit push (`fe48dbe`) rather than trusting
+that one rebuild: triggered `4e0c2922` within ~14 seconds, **SUCCESS**,
+confirmed via `commitHash` match that it really was this commit, and via
+the build log that `pip install uv==0.4.30` resolved correctly (not empty).
+Backend responded `200` after.
+
+**Both platforms now genuinely confirmed auto-deploying on push, verified
+independently with real pushes and real build-log inspection, not just
+dashboard status text.** The manual `vercel --prod` / `railway up`
+workflow is retired for routine fixes — `DEPLOY.md` and `CLAUDE.md` updated
+accordingly.
+
+**Not a blueprint deviation** — infrastructure setup, now actually
+complete. The `NIXPACKS_UV_VERSION` pin is worth remembering as a standing
+fact: if a future `uv` upgrade is wanted, this variable needs updating
+manually, since it's now deliberately no longer auto-detected.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
