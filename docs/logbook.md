@@ -710,6 +710,69 @@ logged in #21 actually holds under a real failure, not synthetic testing.
 
 ---
 
+## 23. Root-caused #20/#22's `uvicorn` crash — and the vendor's own diagnosis was wrong
+
+**Railway's own platform diagnosis** (surfaced independently, not asked for)
+proposed: Nixpacks installs `uvicorn` into `/opt/venv`, but only adds it to
+`PATH` via `/root/.profile`, which the non-login start shell never sources.
+Proposed fix: hardcode `startCommand` to the absolute path
+`/opt/venv/bin/uvicorn`.
+
+**Verified against actual build logs before applying anything, per explicit
+instruction — and the diagnosis didn't hold up.** Checked all three real
+crashes (`8b10817e` from #20, `52303bf6` from #22) against a known-good
+build (`d5b0caf2`). Every single crash showed a warning the successful
+builds never showed:
+```
+warning: `VIRTUAL_ENV=/opt/venv` does not match the project environment path `.venv` and will be ignored
+Creating virtual environment at: .venv
+Installed 64 packages in ...ms
+```
+This means `uv sync` wasn't just failing to expose `/opt/venv` on `PATH` —
+in every crash, **it never installed anything into `/opt/venv` at all.** It
+detected a mismatch, discarded the pre-activated `/opt/venv`, and installed
+all 64 packages (including `uvicorn`) into a separate `/app/.venv` instead.
+Hardcoding `startCommand` to `/opt/venv/bin/uvicorn`, as suggested, would
+not have fixed any of the three actual crashes observed — it would have
+converted `uvicorn: command not found` into
+`/opt/venv/bin/uvicorn: No such file or directory` in the identical
+failure scenarios, since that path was never populated in any of them.
+The real inconsistency sits one level upstream of where the vendor's
+diagnosis pointed: whether `uv sync` respects the activated venv at all,
+not what happens to `PATH` afterward.
+
+**Fix:** pinned `UV_PROJECT_ENVIRONMENT=/opt/venv` as a Railway service
+variable, forcing `uv sync` to always target `/opt/venv` regardless of its
+own mismatch heuristic — confirmed via Railway's docs and the project's own
+prior build logs (`ARG`/`ENV "ANTHROPIC_API_KEY"` already visible in
+generated Dockerfiles from a plain service variable) that this is exposed
+during the Nixpacks build step, not just at runtime — no `railway.json`
+change needed.
+
+**Verified the actual mechanism, not just a green deployment:** the next
+build's logs showed the mismatch warning **absent** — straight from
+`Successfully installed uv-0.4.30` to `Prepared 1 package` to
+`Installed 64 packages`, no separate `.venv` created. Runtime logs showed a
+clean `Uvicorn running on http://0.0.0.0:8080` and a real `200` on the
+health check's own `GET /topics`. Confirmed independently: `railway status`
+showed the new deployment ID genuinely `Online` (not a health-check
+fail-safe fallback to the previous one), and a direct `curl` against the
+production URL returned `200`.
+
+**Not root-caused further:** *why* `uv sync`'s mismatch check fires
+inconsistently in the first place (a leading theory, not confirmed: the
+shared `--mount=type=cache` uv cache persisting project-environment state
+across builds) is now moot — forcing the variable removes the ambiguity
+regardless of why `uv` was inconsistent about it.
+
+**Not a blueprint deviation** — bug fix, and a correction of a third
+party's own diagnosis of its platform, not a design decision. Worth
+remembering: don't apply a vendor's proposed fix on their word alone when
+the actual evidence (real build logs, in this case) is checkable and cheap
+to check — it directly contradicted the suggested fix here.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
