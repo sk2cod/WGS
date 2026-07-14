@@ -220,6 +220,18 @@ Since the two lanes run in parallel (`asyncio.gather`), total request time is `m
 
 ---
 
+## 13. Confirmed: generate → render → export works end to end on device
+
+**Report:** after #11 and #12 landed, the creator confirmed directly on her phone that a real generate → render → export pass completes correctly — not just synthetic verification from this side (curl calls, local repro scripts).
+
+**Status:** this closes out the "Load failed" (#11) and "render failed: 500" (#12) issues as genuinely resolved in real usage, not just in isolated testing against production. No further action needed on either.
+
+**Still open, not yet stress-tested (carried over from prior sessions, not re-raised as active bugs):**
+- `critique_post`/`refine_post` share the same JSON-parsing shape as `draft_post` (#7's fix covers all three via the shared `LLMProvider.complete()` method), but only `draft_post` was directly repro-tested against the live API before/after the `thinking` fix. Worth a dedicated stress test if a similar `JSONDecodeError` ever resurfaces.
+- The hero-image cache (`providers/duotone.py`, keyed by `topic_id` + mood palette) is rarely hit in practice because `angle_engine.py` resamples `mood` randomly on every call, changing the cache key almost every time. Not a bug, just a missed efficiency/cost opportunity.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
