@@ -47,6 +47,7 @@ After finishing any phase: invoke an independent check against that phase's "Don
 - `backend/.env` and `frontend/.env.local` exist locally with real API keys already filled in — **do not recreate them or generate fresh `.env.example` placeholders that overwrite real values.**
 - Both are correctly gitignored — verify with `git status` before any commit that they don't appear as staged.
 - `IMAGE_QUALITY=low` — the medium→low experiment ran: duotoned output is visually indistinguishable, and low cut worst-case `/generate` latency roughly in half-to-third (100+s outliers down to a consistent ~20-32s) plus ~8x lower image cost. Switched on both Railway and local `.env`.
+- **Frontend must build with `--webpack`, not Turbopack** (`frontend/package.json`'s `build` script is `next build --webpack`) — Next 16's default Turbopack production build silently skips the "Collecting build traces" step for this project, so the compiled `@vercel/og` binary Next's internal og module needs at runtime never makes it into the deployed Vercel serverless function. Every `/api/render` call 500'd in production until this was found (build succeeded and worked fine with `next dev`/local `next start` either way — this only ever showed up as a deployed-on-Vercel failure). Don't switch this back to Turbopack without re-verifying `/api/render` in production first.
 
 ---
 
