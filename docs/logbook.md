@@ -771,6 +771,12 @@ remembering: don't apply a vendor's proposed fix on their word alone when
 the actual evidence (real build logs, in this case) is checkable and cheap
 to check — it directly contradicted the suggested fix here.
 
+**Closing-the-loop confirmation:** pushing this very entry (`d2ab3b3`,
+docs-only — `CLAUDE.md`/`DEPLOY.md`/this file, nothing under `backend/`)
+came back `SKIPPED` on Railway, not a wasted rebuild — `watchPatterns`
+from #21 holding correctly alongside this fix, not just at the moment it
+was first set. Production `curl` still `200` throughout.
+
 ---
 
 ## Summary — deviations from the original design docs
