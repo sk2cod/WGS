@@ -675,6 +675,41 @@ to #20.
 
 ---
 
+## 22. #21's health-check gate confirmed working on a real recurrence — no outage this time
+
+**Pushed the three local commits from #21.** The resulting deployment
+(`52303bf6`) hit the **exact same `uvicorn: command not found` bug as
+#20** — third occurrence now, still not root-caused, still non-deterministic
+against an identical-looking build recipe. This time, the outcome was
+different:
+
+```
+Starting Healthcheck — Path: /topics, Retry window: 1m0s
+Attempt #1-4 failed with service unavailable
+1/1 replicas never became healthy! Healthcheck failed!
+```
+
+Railway marked the deployment `FAILED` and **did not cut over traffic**.
+Confirmed directly rather than assumed: `curl` on the production URL
+returned `200`, and `railway status` showed `Online · Deploy failed` — the
+previous good deployment (`d5b0caf2`) kept serving throughout. Zero
+user-facing impact, versus #20's real outage from the identical underlying
+bug.
+
+**Status going forward:** the `uvicorn` PATH issue is still unresolved and
+will keep failing new backend deploys until root-caused — but it's now
+contained rather than dangerous, which was the actual goal of #21. Worth
+root-causing when there's appetite for it (leading candidate: the Dockerfile's
+PATH fix lives in `/root/.profile`, which only applies to login shells, and
+whatever different shell context Railway sometimes uses to run the start
+command doesn't source it) — but no longer an active production risk in
+the meantime.
+
+**Not a blueprint deviation** — confirms infrastructure hardening already
+logged in #21 actually holds under a real failure, not synthetic testing.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
