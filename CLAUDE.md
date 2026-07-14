@@ -30,6 +30,27 @@ After finishing any phase: invoke an independent check against that phase's "Don
 
 ---
 
+## Logbook discipline — non-negotiable
+
+Every time a change is made to fix a reported issue (a bug, a broken deploy, an
+unexpected production failure — anything beyond routine new-feature build-out),
+add an entry to `docs/logbook.md` in the same session, before considering the fix
+done. Entry shape (match the existing ones): symptom, investigation/root cause,
+fix, and whether it deviates from `blueprint.md`/`implementation-guide.md` (call
+this out explicitly, even if the answer is "no deviation" — that's still useful
+signal). Dead-end attempts that didn't work are worth keeping too, so they aren't
+retried blind later (see logbook #12 for the pattern).
+
+**Why:** once the project is in day-to-day use, the logbook becomes a primary
+source (alongside the blueprint/implementation-guide) for writing a final system
+architecture document — it needs to be complete as we go, not reconstructed from
+memory or git archaeology after the fact.
+
+This does not apply to routine forward build-out of a phase's planned scope —
+just to anything that came up as a problem and got fixed.
+
+---
+
 ## Locked decisions — don't re-litigate these
 
 - **Brand:** Women's Growth Society, masthead short form `WGS`, handle `@womensgrowthsociety`
