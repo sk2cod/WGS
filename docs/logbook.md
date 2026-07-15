@@ -1451,6 +1451,88 @@ elsewhere.
 
 ---
 
+## 32. Masthead simplified to `masthead_short` only — explicit request, deviates from blueprint Section 12
+
+**What changed:** every slide's masthead (`frontend/components/slides/Masthead.tsx`,
+shared by all 6 templates — the five locked in Phase 1 plus
+`CarouselBodyTeaching`, logbook #3) now renders only `masthead_short`
+("WGS"). The thin rule/separator and the `{primary_category} NO. {n}`
+text that used to follow it are removed entirely, per explicit request to
+simplify what she sees on every slide.
+
+**This is a deliberate deviation from blueprint.md Section 12**, which
+specifies the masthead as doing two jobs at once: making a lone
+screenshot recognizable as hers, and — via the category+number —
+"signal[ing] what kind of post it is." This change keeps the first job,
+drops the second. Not a bug; logged per the phase-gating/logbook
+discipline rule that any deviation from a written design decision gets
+called out explicitly, even when directly requested. `docs/blueprint.md`
+Section 12 was left as-is (still accurately describes the original
+design intent and the backend mechanism, which is unchanged) rather than
+rewritten, since the doc's job here is to record what was decided and
+why, not to be silently edited to match; this logbook entry is the
+record of the deviation.
+
+**Confirmed before changing anything — the masthead number is genuinely
+display-only, not wired into anything functional:** grepped the backend
+for `next_masthead_number` (`models/memory.py`) — its only two callers
+are `engine/brief_builder.py` and `sources/paste_link.py`, both just
+building the display string returned to the frontend. Content memory's
+non-repetition filter (angle engine) keys on `fingerprint`
+(`topic+angle+approach`), never the masthead number. `selector.py`'s
+coverage weighting (`_topic_weight`) counts `MemoryRecord`s by
+`topic_id`, also never the masthead number. This matches blueprint
+Section 11's own framing of the masthead count as "a simple,
+deterministic Python query" that exists to compute a displayed string,
+not a value anything else reads back. So this change is genuinely
+frontend-display-only, as scoped — no backend behavior changes.
+
+**What was deliberately left untouched, per explicit instruction:**
+`next_masthead_number()` and `brief_builder.py`'s masthead-string
+computation are fully intact and still run on every `/generate` call —
+the backend still computes and returns `"WGS — MINDSET NO. 14"` as
+before; the frontend's `MastheadInfo` type, `parseMasthead()`, and every
+route that threads `category`/`number` through
+(`SlideRenderer.tsx`, `/api/render`, `editor/page.tsx`, `export/page.tsx`)
+are also unchanged — they still carry the full data, `Masthead.tsx` just
+no longer renders two of its three fields. Reversing this later is a
+one-file change.
+
+**Verified both the editor-preview and `/api/render` (Satori/`@vercel/og`)
+paths actually share this one component**, rather than assuming it from
+the file being imported in both places: `SlideRenderer.tsx` (used by the
+live editor preview) and `app/api/render/route.tsx` (the real PNG export
+route) both import the same six template components
+(`CarouselCover`, `CarouselBody`, `CarouselBodyTeaching`,
+`CarouselClosing`, `SingleQuote`, `SingleStat`) directly, and each of
+those six imports `Masthead.tsx` internally — confirmed via grep, not
+inferred from the docstrings alone. One edit to `Masthead.tsx` reaches
+both paths with no route-specific override anywhere in between.
+
+**Verified rendering, real output, not just code review:** no browser-
+automation tool was available in this session, so verification ran
+through the actual `/api/render` (Satori) route directly — the same
+route both `/preview` and the live editor call, confirmed above to share
+the identical component tree. Rendered all 6 templates × all 3 moods (18
+real PNGs) via real POST requests to a locally running `next dev` server,
+deliberately passing a *non-empty* `category`/`number` in the request
+payload ("MINDSET" / "14") to prove they're truly not rendered even when
+present in the data, not just absent because the test data was blank.
+Visually inspected a representative sample across template types
+(cover, body-teaching, closing — including its masthead-color-override-
+on-dark-background case, and single-stat) and moods: every slide shows
+only "WGS," no rule, no dangling category/number text, and no leftover
+spacing artifact where the removed elements used to sit (the masthead
+row is a plain flex row with intrinsic sizing, not a fixed-width or
+justify-between container, so removing two children just makes the row
+narrower — no other template's layout depends on the masthead's
+rendered width). `npx tsc --noEmit` — clean, no type errors from the
+unused-but-still-passed `category`/`number` fields on `MastheadInfo`.
+
+**Not committed or pushed** — held for review per explicit instruction.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -1462,4 +1544,5 @@ elsewhere.
 | 11 | `IMAGE_QUALITY=low` instead of the doc's starting `medium` | The guide's own planned experiment, now run and confirmed |
 | 12 | Frontend builds with `--webpack`, not Next 16's default Turbopack | Turbopack silently drops a file `@vercel/og` needs at runtime on Vercel; webpack doesn't |
 | 30 | `voice_samples.direct` rewritten to be domain-diverse instead of the originally "Locked" (blueprint Section 4) workplace-themed 5 samples | Live-repro-confirmed as the dominant driver of content drift (accepted angles pivoting to invented office/meeting scenarios) — the locked value was actively working against the product's own quality goal |
+| 32 | Masthead shows only `masthead_short` ("WGS") — the `{category} NO. {n}` text and its rule/separator, specified in blueprint Section 12, are no longer rendered | Explicit request to simplify what she sees on every slide; backend computation is untouched, so this is reversible in one file |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
