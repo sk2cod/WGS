@@ -988,6 +988,72 @@ a time.
 
 ---
 
+## 27. Taxonomy replacement (37 pairs) broke `awareness_calendar.py` and 8 test files — caught before push, not in production
+
+**Symptom:** replacing `topics.yaml` with the new 37-pair taxonomy
+(logbook entry above this one covers the sampling fix; the taxonomy swap
+itself was built and verified for loader-validity and live `/generate`
+correctness in an earlier session, but the full test suite was never run
+against it at that point). Running `pytest` after the swap surfaced
+**51 of 111 tests failing** — traced every one before touching anything:
+all were either `KeyError: Unknown topic_id` from fixtures hardcoding old
+topic ids (e.g. `mindset-reframing-self-doubt`, `career-salary-negotiation`)
+across 8 test files, or stale count assertions (`assert len(topics) == 18`,
+`assert 15 <= len(topics) <= 20`, `assert 3 <= len(topic.seed_angles) <= 5`
+— the last one broken by design, since 3 approved Wellness pairs carry 6
+seed phrases verbatim from `taxonomy-draft-v1.md`).
+
+**A real production bug, not just test staleness:** `app/sources/
+awareness_calendar.py`'s `AWARENESS_DAYS` list hardcodes a `related_topic_id`
+per awareness day, read by `select_daily_picks`/`build_daily_pick` to
+resolve a real `Topic` for the timely daily-pick slot. 5 of its 8 entries
+pointed at topic ids the new taxonomy no longer has (Galentine's Day,
+Equal Pay Day, World Health Day, Menstrual Hygiene Day, International
+Self-Care Day) — this was production code, not a fixture, and would have
+failed a real `get_topics_by_id()` lookup the next time one of those 5
+dates actually came due. `test_awareness_calendar.py`'s own
+`test_all_related_topic_ids_exist_in_taxonomy` caught this immediately on
+the first post-swap test run, before any of it reached production.
+
+**Root cause:** the taxonomy-replacement session verified the loader,
+manual `/generate` calls, and the browse-screen tile counts, but never ran
+`pytest`, so neither the test fixture staleness nor the
+`awareness_calendar.py` bug surfaced until this session explicitly ran the
+full suite as part of verifying an unrelated fix.
+
+**Fix:**
+- `app/sources/awareness_calendar.py`: remapped the 5 stale
+  `related_topic_id` values to their closest new-taxonomy equivalent
+  (`relationships-friendship-boundaries` → `relationships-boundaries`,
+  `society-gender-pay-gap` → `society-pay-scale`,
+  `health-reproductive-literacy` → `health-reproductive-health`,
+  `health-hormonal-cycle-basics` → `health-hormonal-cycle`,
+  `wellness-rest-is-not-lazy` → `wellness-rest`); the other 3
+  (`inspiring-women-who-changed-history`, `wellness-stress-regulation`,
+  `career-imposter-syndrome`) already matched unchanged ids in the new
+  taxonomy and needed no change.
+- 8 test files (`test_angle_engine.py`, `test_brief_builder.py`,
+  `test_generate_route.py`, `test_generate_route_http.py`,
+  `test_generator.py`, `test_main.py`, `test_selector.py`,
+  `test_taxonomy.py`, `test_validator.py`) updated to reference real
+  topic ids in the new taxonomy and correct counts.
+
+**Verified:** functional check (not just the id-existence test) —
+`upcoming_awareness_days(date(2026, 2, 10), window_days=7)` resolves
+Galentine's Day to `relationships-boundaries` → "Boundaries" end to end.
+Full suite: 111/111. Deployed to Railway (commit `0e5b66e`) and confirmed
+live: build log shows no stale-venv warning, healthcheck passed on the
+first attempt, `GET /topics` on the production URL returns 37 topics with
+the correct per-category distribution.
+
+**Not a blueprint deviation** — a bug fix, caught pre-push by finally
+running the existing test suite against the swap, not a design decision.
+Worth remembering as a process note: a taxonomy/data-shape change needs
+`pytest` run against it, not just loader-validity and spot-checked live
+calls, before it's considered verified.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
