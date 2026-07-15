@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import random
 import uuid
 from datetime import date
@@ -116,6 +117,23 @@ class ReshuffleImageResponse(BaseModel):
     hero_image_base64: str
 
 
+def _hero_cache_keyword(brief: ContentBrief, *, variant: int | None = None) -> str:
+    """Cache keyword for a brief's hero image: topic_id (namespacing/readability) plus
+    a short hash of hero_image_prompt (logbook #30) — hero_image_prompt is built from
+    visual_subject (or angle as a fallback, logbook #4), so it varies whenever the
+    actual visual content of the post does. Before this, the keyword was topic_id
+    alone, so any two posts on the same topic+mood silently shared one cached image
+    regardless of how different their angles were.
+
+    `variant` is reshuffle-image's escape hatch (routes below): each explicit variant
+    number gets its own cache entry, so repeated taps of "reshuffle" keep generating
+    fresh images, while re-requesting the same variant number is still a free cache
+    hit — unchanged behavior, just now scoped per-angle instead of per-topic."""
+    content_key = hashlib.sha256(brief.hero_image_prompt.encode()).hexdigest()[:16]
+    base = f"{brief.topic_id}:{content_key}"
+    return f"{base}:v{variant}" if variant is not None else base
+
+
 def _generate_hero_for_keyword(
     hero_image_prompt: str,
     keyword: str,
@@ -135,10 +153,11 @@ def _generate_hero_for_keyword(
 def _generate_hero(
     brief: ContentBrief, brand_kit: BrandKit, image: ImageProvider, settings: Settings
 ) -> bytes:
-    """Carousel cover only. Cached by topic keyword + mood palette — a cache hit skips
-    the image API call entirely."""
+    """Carousel cover only. Cached by topic + angle content + mood palette — a cache
+    hit skips the image API call entirely."""
     palette = brand_kit.mood_palettes[brief.mood]
-    return _generate_hero_for_keyword(brief.hero_image_prompt, brief.topic_id, palette, image, settings)
+    keyword = _hero_cache_keyword(brief)
+    return _generate_hero_for_keyword(brief.hero_image_prompt, keyword, palette, image, settings)
 
 
 async def _generate_for_brief(
@@ -356,7 +375,7 @@ async def reshuffle_image_route(request: ReshuffleImageRequest) -> ReshuffleImag
 
     settings = get_settings()
     palette = get_brand_kit().mood_palettes[request.brief.mood]
-    keyword = f"{request.brief.topic_id}:v{request.variant}"
+    keyword = _hero_cache_keyword(request.brief, variant=request.variant)
     hero_bytes = await asyncio.to_thread(
         _generate_hero_for_keyword,
         request.brief.hero_image_prompt,

@@ -21,12 +21,13 @@ export const WGS_BRAND_KIT: BrandKit = {
       "You're allowed to outgrow people who only ever loved the smaller version of you.",
       "Some days strength looks like getting up. Other days, it looks like finally resting.",
     ],
+    // Revised 2026-07-15 (logbook #30) — see docs/blueprint.md Section 4.
     direct: [
-      "Research shows women get interrupted more in meetings than men. Naming it doesn't fix it — but it's the first step.",
-      "Confidence isn't a feeling you wait for. It's a skill you build one uncomfortable conversation at a time.",
-      "You don't need permission to negotiate your salary. You need the numbers, and the nerve to say them out loud.",
-      "Boundaries aren't about being difficult. They're about being clear enough that no one has to guess.",
-      "Burnout isn't a personal failing. It's what happens when the workload outpaces the support.",
+      "Rest isn't something you earn after you collapse. It's maintenance you schedule before your body forces the issue.",
+      "Your cycle isn't an inconvenience you push through. It's data about your body you're free to actually use.",
+      "Saying less to someone isn't cold. It's what happens once you stop over-explaining a decision that was already final.",
+      "Research shows women are socialized to soften their opinions before they've even finished stating them. Naming the pattern doesn't undo it — but it's the first thing that has to happen.",
+      "Confidence isn't a feeling you wait for. It's a skill you build one uncomfortable choice at a time.",
     ],
   },
   forbidden: [

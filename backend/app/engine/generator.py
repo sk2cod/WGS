@@ -127,13 +127,23 @@ _VOICE_INSTRUCTION = (
 # `story` approach's structural requirement to be built ENTIRELY around one
 # scenario: this asks every approach to illustrate its point with something
 # concrete, even a checklist or framework, not just `story` posts.
+#
+# Deliberately domain-neutral (logbook #30) — an earlier version of this
+# instruction named literal example nouns ("a specific meeting, a specific text
+# message, a specific conversation"), and the model was found to pattern-match to
+# those literal examples rather than the underlying principle, inventing
+# workplace/meeting scenes even on posts with no connection to work. The examples
+# below name the QUALITY of specificity wanted, not a domain.
 _SPECIFICITY_INSTRUCTION = (
     "Illustrate the point with a concrete, everyday moment she might actually be "
-    "in right now — a real scene (a specific meeting, a specific text message, a "
-    "specific conversation) rather than an abstract statement of a principle. "
-    "This applies whatever the approach's structure is — even a checklist or "
-    "framework should be anchored in something recognizably real, not left as "
-    "generic abstraction."
+    "in right now — a real, identifiable scene (a specific sensation, a specific "
+    "moment in her day, a specific interaction with someone in her life) rather "
+    "than an abstract statement of a principle. Let the scene come from wherever "
+    "the angle itself is actually grounded — her body, her home, a friendship, a "
+    "quiet moment alone — not from a default assumption about where she spends "
+    "her time. This applies whatever the approach's structure is — even a "
+    "checklist or framework should be anchored in something recognizably real, "
+    "not left as generic abstraction."
 )
 
 _ACTIONABILITY_INSTRUCTION = (

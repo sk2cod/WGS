@@ -1171,6 +1171,286 @@ further here.
 
 ---
 
+## 29. OPEN — `refine_post` intermittent JSON/shape failures, ~1-in-4 in a 20-trial sample — not yet fixed
+
+**Status: open, carried forward for a dedicated session — same pattern as
+#13's carried-over items. No fix attempted here.**
+
+**Symptom:** during live testing for #28 (the Single Image style choice),
+a 20-trial batch of real `single_image` `/generate` calls (10 `quote`
+style, 10 `stat` style, across 10 different topics) hit **5 failures** —
+a measurable ~1-in-4 rate, not a rare fluke. Every failure traced to the
+same call: `generate_post` → `refine_post` → `_parse_post`. Full detail
+and tracebacks are in #28's follow-up section; this entry exists so the
+issue has its own standalone record rather than staying folded into an
+unrelated feature entry.
+
+**Root cause, as currently understood:** `refine_post`'s rewrite step
+either (a) returns JSON with a genuine syntax error on otherwise
+substantial, real content — observed: `Extra data` after a complete JSON
+object, and an unescaped raw control character mid-string — or (b)
+returns more slide objects than the brief's `slide_count` allows (5–8
+slide objects for a `single_image` brief that only ever wants 1), even
+though the sampled approach was already one of the confirmed-safe ones
+(`story`, `question_reflection`, `common_mistakes`) and `draft_post` had
+already returned the correct single slide for the exact same brief
+moments earlier. So the drift happens specifically during refinement, not
+because of an unsafe approach reaching `refine_post` (logbook #26 already
+rules that out) and not because the shape was ambiguous going in.
+
+**Explicitly distinct from #7's original signature:** #7's bug was an
+*empty* response — extended thinking consuming the entire token budget,
+`stop_reason: max_tokens`, a `thinking` content block only, no text at
+all. None of these 5 `refine_post` failures look like that — all involved
+substantial, real content that was merely malformed or excessive. The
+`thinking: disabled` fix from #7 is not implicated one way or the other
+here without inspecting the raw `stop_reason` on a failing call, which
+wasn't captured in this batch.
+
+**What's confirmed, not just suspected:** `critique_post` is reliable —
+in all 5 of these failing trials, `critique_post` necessarily ran and
+returned a usable critique successfully before `refine_post` broke on the
+next step (`generate_post`'s draft → critique → refine sequence means
+`refine_post` is only reached after `critique_post` returns). This is
+real, if indirect, live evidence for `critique_post`'s reliability, on
+top of #13's original open question about it.
+
+**Not fixed here — deliberately.** Worth a dedicated session: candidates
+worth checking first would be whether `refine_post`'s prompt reinforces
+the exact slide-count/role constraint as strongly as `draft_post`'s does,
+and whether capturing the raw Anthropic response (`stop_reason`, content
+block types) on a live repro would rule the `thinking` mechanism in or
+out definitively rather than by inference.
+
+---
+
+## 30. Fixing the read-only investigation's three findings: workplace-drift voice samples, a leading `_SPECIFICITY_INSTRUCTION` example, and a hero-image cache collision
+
+A prior read-only investigation (this same session, before any fix) traced
+Report A's content drift (accepted angles about rest/fatigue/body-kindness
+generating workplace-meeting content instead) to three mechanisms. This
+entry fixes all three, verified with real Anthropic/OpenAI API calls
+against a local, file-backed `MemoryStore` (never against production
+Supabase — see "Verified" below for why that distinction matters here).
+
+### Fix 1 — `voice_samples.direct` was uniformly workplace-themed (dominant driver)
+
+**Root cause (already established by the read-only trace):** `myth_vs_fact`,
+`educational`, `checklist`, `stat_research`, `framework`, and
+`common_mistakes` (6 of 8 approaches) all resolve to the brand kit's
+"direct" voice register (`taxonomy/voice_register.py`). All 5 of that
+register's original samples were workplace/career-themed (meetings,
+salary negotiation, workload, "no one has to guess" boundaries-at-work).
+`_brief_system_prompt` (`generator.py`) injects these verbatim as few-shot
+examples on every draft/critique/refine call — the model was found to be
+pattern-matching to their *topic domain*, not just their tone, and
+inventing an office scene regardless of what the actual accepted angle
+was about.
+
+**Fix:** rewrote `voice_samples.direct` (`taxonomy/wgs_brand_kit.py`) —
+same count (5), same grounded/direct/confident tone and rhetorical
+patterns as the originals, but domain-diverse: one sample each from
+Wellness, Women's Health, Relationships, Society, and Mindset, none
+anchored in a meeting, manager, workplace, or office scene. `poetic`
+samples were untouched (they were never the reported failure mode, and
+the read-only trace already established they draw from a different,
+non-work-themed set).
+
+**This is a deliberate deviation from a value blueprint.md calls
+"Locked"** (Section 4) — logged as such, not silently overwritten.
+`docs/blueprint.md` Section 4 and `docs/implementation-guide.md`'s copy of
+`WGS_BRAND_KIT` were both updated to match, with an inline note pointing
+back here, so the docs don't silently drift from what the app actually
+runs (the failure mode logbook #16 flagged for a different field).
+`frontend/lib/wgs-brand-kit.ts` was also updated for consistency — it's a
+verbatim "Locked value" copy per its own header comment, used only for
+`/preview` and exercising `/api/render` before real generation exists, so
+it never touches the actual generation pipeline, but leaving it stale
+would have recreated the exact doc-drift problem this fix is trying to
+avoid elsewhere.
+
+**Important caveat — the live Supabase `brand_kit` row was deliberately
+NOT touched.** `taxonomy/wgs_brand_kit.py`'s `get_brand_kit()` only seeds
+Supabase from this constant if the `brand_kit` table is empty; production
+seeded it long ago (logbook #9), so editing the Python constant alone
+has **no effect on production** until the live row is also updated (there
+is no existing "edit brand kit" route/mechanism — `engine/memory.py`'s
+`append_voice_sample()` explicitly says persisting a `BrandKit` update
+isn't wired up yet). Given the explicit instruction not to let this go
+near production before review, this was left as an open follow-up rather
+than done unilaterally: the constant and docs are fixed, but production's
+actual `direct` voice samples are still the old, workplace-themed ones
+until someone runs `upsert_brand_kit()` (or the Supabase row is edited
+directly) with the new value.
+
+### Fix 2 — `_SPECIFICITY_INSTRUCTION`'s literal example nouns (compounding factor)
+
+**Root cause:** the instruction told the model to ground posts in "a
+specific meeting, a specific text message, a specific conversation" —
+illustrative examples that the model appears to have pattern-matched to
+literally, not just as illustrations of "be concrete." Compounded Fix 1
+rather than being an independent cause on its own.
+
+**Fix (`generator.py`):** reworded to name the *quality* of specificity
+wanted rather than domain-specific nouns — "a specific sensation, a
+specific moment in her day, a specific interaction with someone in her
+life" — plus an explicit line telling the model to let the scene come
+from wherever the angle is actually grounded ("her body, her home, a
+friendship, a quiet moment alone — not... a default assumption about
+where she spends her time"). No example noun in the new wording implies
+an office/work setting.
+
+**Not a blueprint deviation** — this is a prompt-wording bug fix, not a
+locked-spec change; blueprint.md never specified this instruction's exact
+example nouns.
+
+### Fix 3 — hero image cache collision across different angles on the same topic
+
+**Root cause (already established by the read-only trace):** the hero
+image cache keyword (`providers/duotone.py`'s `get_cached_hero`/
+`duotone_and_cache`) was `brief.topic_id` alone (plus mood palette) —
+never the angle, `visual_subject`, or fingerprint. Any two posts on the
+same topic+mood, however different their angles, silently returned the
+exact same cached hero image, skipping image generation entirely on every
+call after the first for that topic+mood pair (this is what Report B's
+"identical hero image on regenerate" traced to, separately from the text
+drift).
+
+**Fix (`routes/generate.py`):** added `_hero_cache_keyword(brief,
+*, variant=None)` — `topic_id` (namespacing) plus a 16-char sha256 prefix
+of `brief.hero_image_prompt`. `hero_image_prompt` is already a real
+`ContentBrief` field (unlike `visual_subject`, which is folded into it at
+brief-build time and then discarded, per logbook #4) and is exactly the
+angle-specific visual content the cache should key on, so this needed no
+new field or frontend/`api-types.ts` change. `_generate_hero` now uses
+this keyword; `reshuffle_image_route`'s existing `:v{variant}` suffix
+mechanism is layered on top of the same content-aware base instead of
+appending directly to `topic_id` — which, as a side effect, also fixes
+the same collision bug for reshuffle (two different angles on one
+topic+mood reshuffling to the same variant number previously collided
+too; they no longer do), while leaving reshuffle's "fresh variant number
+= new image, repeat a variant number = free cache hit" behavior unchanged.
+
+**Not a blueprint deviation** — blueprint.md never specified the cache
+key's exact composition, only that hero images should be "cached by
+keyword + mood palette."
+
+### Verified
+
+- **111/111 backend tests passing**, no regressions.
+- **Deterministic check:** `_hero_cache_keyword()` — two different
+  `visual_subject`s on the same topic+mood now produce different
+  keywords; the identical brief still produces the identical keyword
+  (cache-sharing preserved for genuinely repeated work); reshuffle variant
+  numbers no longer collide across different angles.
+- **Live, real-API check (main repro):** re-ran the exact
+  wellness-motivational/`myth_vs_fact` scenario from the investigation
+  report end to end (draft → critique → refine). Zero workplace-term hits
+  in either the draft or the refined post; content stayed grounded in
+  fatigue/rest/body throughout ("crashing at 9pm on a Tuesday," "your
+  body slowing down is a protective system," "what did I say yes to today
+  that I actually wanted to say no to"). Before the fix, the same scenario
+  produced "in front of your team," "career suicide," "crying in a
+  bathroom stall at 4pm" starting from the very first `draft_post` call.
+- **Live, real-API check (5 more direct-register trials):** `educational`
+  (Women's Health/hormonal-cycle), `common_mistakes`
+  (Relationships/boundaries), `stat_research` (Society/pay-scale),
+  `framework` (Mindset/rest), `checklist` (Wellness/sleep) — 0 of 5 drifted
+  to an invented workplace/meeting scenario. One angle (mindset-rest)
+  legitimately named "workplace culture" as one of three real-world
+  sources of a belief the post was specifically about tracing the origin
+  of — correct, on-topic content, not the old failure mode of a full-post
+  pivot to an office scene.
+- **Live, real-API check (poetic register, sanity only):** `story`
+  (mindset-attachment-styles) and `question_reflection`
+  (relationships-quirky-fun) both ran cleanly with zero workplace-term
+  hits, as expected since their voice samples were never touched. One
+  `story` trial hit an unrelated, pre-existing shape-mismatch error (model
+  returned 5 slide objects for a 4-slide role list) — not caused by this
+  fix; same failure class as the still-open #29, noted here rather than
+  investigated further since it's out of this entry's scope.
+- **Live, real-API check (Rosa Parks/NAACP regression, logbook #14's
+  baseline):** re-ran the exact citation-grounded myth-vs-fact scenario.
+  Draft, critique, and refined output all stayed fully grounded in the
+  Rosa Parks/NAACP story across all 4 slides. One residual, much smaller
+  trace did surface: `refine_post`'s caption added a "you've felt this
+  too" bridge (in response to critique correctly flagging the draft as
+  third-person with no direct reader address) that included "the meeting
+  you nailed gets called 'lucky'" as one of two brief relatable
+  comparisons. This is a single incidental word in one bridging sentence,
+  not a full-post pivot away from the accepted angle — the Rosa
+  Parks/NAACP content itself was untouched — and is a categorically
+  smaller failure than logbook #14's original "refine_post abandoned the
+  accepted angle for an unrelated scenario." Noted transparently rather
+  than omitted: the fix eliminates the systemic full-post drift; it
+  doesn't guarantee the word "meeting" can never appear in any generated
+  text again, since it's ordinary English vocabulary the model can still
+  reach for on its own when asked for reader-relatable examples.
+- **Live, real-API check (hero cache):** two different `visual_subject`s
+  on the same topic+mood produced two distinct cache files and distinct
+  image bytes (previously would have collided into one); re-requesting
+  the identical brief was confirmed to still be a free cache hit (no new
+  API call, no new file); the reshuffle `:v{variant}` path was confirmed
+  to still generate a fresh image per new variant number and cache-hit on
+  a repeated variant number.
+
+**Not committed or pushed** — held for review per explicit instruction,
+given this touches core brand-voice content and a caching mechanism used
+on every generation. The production Supabase `brand_kit` row also still
+needs a separate, explicit decision (see Fix 1's caveat above) before
+this fix is live, independent of the git push decision.
+
+---
+
+## 31. OPEN — the blueprint's compounding-voice mechanism has never actually persisted anything in production
+
+**Status: open, carried forward for a dedicated session — same treatment
+as #29's carried-over item. Discovered as a side effect of #30's
+production upsert decision, not separately fixed here.**
+
+**What was found:** blueprint.md Section 4 describes `voice_samples` as
+compounding over time — *"every export and every edit she makes appends
+to the matching register's list... weeks in, generation pattern-matches
+to things she's actually approved, not to a static description of her
+voice. This is the single highest-leverage input against generic
+output."* Read the live production `brand_kit` row directly (not the
+local Python constant, not a cached value) ahead of #30's upsert: both
+`voice_samples.poetic` and `voice_samples.direct` were still exactly 5
+entries each, byte-for-byte identical to the original seed constant from
+Phase 6 (logbook #9). The app has been live and in real use since then —
+if the compounding mechanism were actually persisting, at least one of
+these arrays should have grown.
+
+**Root cause:** `engine/memory.py`'s `append_voice_sample()` exists,
+computes the correct thing (looks up the register via
+`APPROACH_REGISTER`, appends the approved copy to the right list), and
+returns a new `BrandKit` — but its own docstring says outright
+*"callers are responsible for persisting it (no `brand_kit` store exists
+yet)."* Grepping the app for callers of `append_voice_sample` turns up
+none in any route — nothing in the editor/export flow calls it, and
+nothing writes the result back to Supabase via `upsert_brand_kit()` or
+otherwise. The function is a correct, unused building block; the
+persistence wiring described in the blueprint was never actually built,
+despite `brand_kit` itself being fully migrated to Supabase in #9.
+
+**Impact:** every post generated so far — and every post going forward
+until this is fixed — draws on a `voice_samples` list frozen at its
+original 5+5 seed, never learning from what she's actually approved,
+edited, or exported. Per the blueprint's own framing, this is "the single
+highest-leverage input against generic output," so this gap is worth
+prioritizing, not just noting.
+
+**Not fixed here — deliberately**, out of scope for #30's read-only
+verification step. Worth a dedicated session: candidates worth checking
+first would be where in the export/edit flow the append should actually
+trigger (on export confirmation? on a swipe-edit save?), and whether
+`append_voice_sample`'s return value should flow through a new
+`upsert_brand_kit()` call directly, or through a small `BrandKitStore`
+wrapper matching the `MemoryStore`/`PicksStore` pattern already used
+elsewhere.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -1181,4 +1461,5 @@ further here.
 | 9 | Memory/brand kit actually wired to Supabase (not just schema+client existing) | Explicit follow-up request; Phase 6 as literally written stopped short of this |
 | 11 | `IMAGE_QUALITY=low` instead of the doc's starting `medium` | The guide's own planned experiment, now run and confirmed |
 | 12 | Frontend builds with `--webpack`, not Next 16's default Turbopack | Turbopack silently drops a file `@vercel/og` needs at runtime on Vercel; webpack doesn't |
+| 30 | `voice_samples.direct` rewritten to be domain-diverse instead of the originally "Locked" (blueprint Section 4) workplace-themed 5 samples | Live-repro-confirmed as the dominant driver of content drift (accepted angles pivoting to invented office/meeting scenarios) — the locked value was actively working against the product's own quality goal |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |

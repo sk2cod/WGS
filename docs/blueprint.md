@@ -150,7 +150,7 @@ APPROACH_REGISTER = {
 
 **The compounding mechanism:** every export and every edit she makes appends to the matching register's list. Weeks in, generation pattern-matches to things she's actually approved, not to a static description of her voice. This is the single highest-leverage input against generic output.
 
-**Locked values for Women's Growth Society (WGS)** — decided through direct review, ready to seed the real `BrandKit` row:
+**Locked values for Women's Growth Society (WGS)** — decided through direct review, ready to seed the real `BrandKit` row. **Note:** `voice_samples.direct` below was revised 2026-07-15 (logbook #30) — the original 5 samples were all workplace/meeting-themed, which was found to be actively pulling `draft_post` toward inventing office scenarios on topics that had nothing to do with work. This is a deliberate deviation from an otherwise-locked value; see the logbook for root cause and verification.
 
 ```python
 WGS_BRAND_KIT = BrandKit(
@@ -175,11 +175,11 @@ WGS_BRAND_KIT = BrandKit(
             "Some days strength looks like getting up. Other days, it looks like finally resting.",
         ],
         direct=[
-            "Research shows women get interrupted more in meetings than men. Naming it doesn't fix it — but it's the first step.",
-            "Confidence isn't a feeling you wait for. It's a skill you build one uncomfortable conversation at a time.",
-            "You don't need permission to negotiate your salary. You need the numbers, and the nerve to say them out loud.",
-            "Boundaries aren't about being difficult. They're about being clear enough that no one has to guess.",
-            "Burnout isn't a personal failing. It's what happens when the workload outpaces the support.",
+            "Rest isn't something you earn after you collapse. It's maintenance you schedule before your body forces the issue.",
+            "Your cycle isn't an inconvenience you push through. It's data about your body you're free to actually use.",
+            "Saying less to someone isn't cold. It's what happens once you stop over-explaining a decision that was already final.",
+            "Research shows women are socialized to soften their opinions before they've even finished stating them. Naming the pattern doesn't undo it — but it's the first thing that has to happen.",
+            "Confidence isn't a feeling you wait for. It's a skill you build one uncomfortable choice at a time.",
         ],
     ),
     forbidden=[
