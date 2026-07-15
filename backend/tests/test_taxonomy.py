@@ -31,7 +31,7 @@ def test_approaches_and_entry_points_derive_from_enums():
 
 def test_topics_yaml_loads_and_validates():
     topics = load_topics()
-    assert 15 <= len(topics) <= 20
+    assert len(topics) == 37
 
     ids = [t.id for t in topics]
     assert len(ids) == len(set(ids)), "topic ids must be unique"
@@ -39,7 +39,9 @@ def test_topics_yaml_loads_and_validates():
     seen_categories = set()
     for topic in topics:
         assert topic.primary_category in topic.categories
-        assert 3 <= len(topic.seed_angles) <= 5
+        # Wellness's 3 approved pairs (burnout, rest, stress-regulation) carry 6 seed
+        # phrases each, verbatim from docs/taxonomy-draft-v1.md — not a typo to clamp.
+        assert 3 <= len(topic.seed_angles) <= 6
         assert len(topic.suitable_formats) >= 1
         seen_categories.update(topic.categories)
         if topic.sensitivity == Sensitivity.HEALTH:

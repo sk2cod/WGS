@@ -38,7 +38,7 @@ _NON_TEACHING_PRESELECTED = {
     "approach": "question_reflection",
     "mood": "wisdom",
     "visual_subject": "a sticky note reading 'not today' on a bathroom mirror",
-    "fingerprint": "mindset-reframing-self-doubt:custom:question_reflection",
+    "fingerprint": "mindset-self-doubt:custom:question_reflection",
 }
 
 
@@ -83,7 +83,7 @@ def test_generate_route_returns_full_brief_and_post(monkeypatch):
     response = client.post(
         "/generate",
         json={
-            "topic_id": "mindset-reframing-self-doubt",
+            "topic_id": "mindset-self-doubt",
             "format": "carousel",
             **_NON_TEACHING_PRESELECTED,
         },
@@ -91,7 +91,7 @@ def test_generate_route_returns_full_brief_and_post(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["brief"]["topic_id"] == "mindset-reframing-self-doubt"
+    assert body["brief"]["topic_id"] == "mindset-self-doubt"
     assert len(body["post"]["slides"]) == 3
     assert body["post"]["slides"][0]["template_id"] == "carousel_cover"
     assert body["hero_image_base64"] is not None
@@ -116,7 +116,7 @@ def test_regenerate_slide_route_updates_one_slide(monkeypatch):
     generated = client.post(
         "/generate",
         json={
-            "topic_id": "mindset-reframing-self-doubt",
+            "topic_id": "mindset-self-doubt",
             "format": "carousel",
             **_NON_TEACHING_PRESELECTED,
         },
@@ -148,7 +148,7 @@ def test_regenerate_slide_route_out_of_range_returns_400(monkeypatch):
     generated = client.post(
         "/generate",
         json={
-            "topic_id": "mindset-reframing-self-doubt",
+            "topic_id": "mindset-self-doubt",
             "format": "carousel",
             **_NON_TEACHING_PRESELECTED,
         },
@@ -172,7 +172,7 @@ def test_reshuffle_image_route_returns_new_hero_without_full_regenerate(monkeypa
     generated = client.post(
         "/generate",
         json={
-            "topic_id": "mindset-reframing-self-doubt",
+            "topic_id": "mindset-self-doubt",
             "format": "carousel",
             **_NON_TEACHING_PRESELECTED,
         },
@@ -208,7 +208,7 @@ def test_propose_route_returns_angle_approach_and_reason(monkeypatch):
 
     client = TestClient(app)
     response = client.post(
-        "/generate/propose", json={"topic_id": "mindset-reframing-self-doubt", "format": "carousel"}
+        "/generate/propose", json={"topic_id": "mindset-self-doubt", "format": "carousel"}
     )
 
     assert response.status_code == 200
@@ -239,7 +239,7 @@ def test_generate_route_honors_preselected_angle_skips_resampling(monkeypatch):
     response = client.post(
         "/generate",
         json={
-            "topic_id": "mindset-reframing-self-doubt",
+            "topic_id": "mindset-self-doubt",
             "format": "carousel",
             **_NON_TEACHING_PRESELECTED,
             "mood": "celebratory",
@@ -304,8 +304,8 @@ def test_reshuffle_image_route_rejects_single_image_format(monkeypatch):
 
     client = TestClient(app)
     brief = {
-        "topic_id": "mindset-reframing-self-doubt",
-        "topic_name": "Reframing Self-Doubt",
+        "topic_id": "mindset-self-doubt",
+        "topic_name": "Self-Doubt",
         "angle": "a",
         "approach": "story",
         "goal": "educate",

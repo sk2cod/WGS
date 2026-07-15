@@ -102,7 +102,7 @@ def test_select_daily_picks_is_deterministic_for_same_seed():
 
 
 def test_topic_weight_boosts_unused_topics_over_recently_used():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     memory = [
         MemoryRecord(
             id=f"m{i}",
@@ -125,7 +125,7 @@ def test_topic_weight_boosts_unused_topics_over_recently_used():
 
 
 def test_build_daily_pick_composes_angle_and_pitch_in_two_cheap_calls():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _QueueLLM([ANGLE_JSON, PITCH_JSON])
     pick = build_daily_pick(
         TopicPick(topic=topic, source_type="evergreen"), [], llm, rng=random.Random(0)

@@ -25,7 +25,7 @@ AWARENESS_DAYS: list[AwarenessDay] = [
         name="Galentine's Day",
         month=2,
         day=13,
-        related_topic_id="relationships-friendship-boundaries",
+        related_topic_id="relationships-boundaries",
         note="a day about celebrating women's friendships",
     ),
     AwarenessDay(
@@ -41,7 +41,7 @@ AWARENESS_DAYS: list[AwarenessDay] = [
         name="Equal Pay Day",
         month=3,
         day=12,
-        related_topic_id="society-gender-pay-gap",
+        related_topic_id="society-pay-scale",
         note="marks how far into the year women must work to earn what men earned last year",
     ),
     AwarenessDay(
@@ -49,7 +49,7 @@ AWARENESS_DAYS: list[AwarenessDay] = [
         name="World Health Day",
         month=4,
         day=7,
-        related_topic_id="health-reproductive-literacy",
+        related_topic_id="health-reproductive-health",
         note="the WHO's annual global health awareness day",
     ),
     AwarenessDay(
@@ -57,7 +57,7 @@ AWARENESS_DAYS: list[AwarenessDay] = [
         name="Menstrual Hygiene Day",
         month=5,
         day=28,
-        related_topic_id="health-hormonal-cycle-basics",
+        related_topic_id="health-hormonal-cycle",
         note="a day for open, myth-free conversation about menstrual health",
     ),
     AwarenessDay(
@@ -65,7 +65,7 @@ AWARENESS_DAYS: list[AwarenessDay] = [
         name="International Self-Care Day",
         month=7,
         day=24,
-        related_topic_id="wellness-rest-is-not-lazy",
+        related_topic_id="wellness-rest",
         note="a day reframing rest and self-care as maintenance, not indulgence",
     ),
     AwarenessDay(

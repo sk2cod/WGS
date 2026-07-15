@@ -102,7 +102,7 @@ def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
 
     result = asyncio.run(
         run_generate(
-            topic_id="mindset-reframing-self-doubt",
+            topic_id="mindset-self-doubt",
             format=Format.CAROUSEL,
             brand_kit=WGS_BRAND_KIT,
             topics_by_id=get_topics_by_id(),
@@ -123,20 +123,20 @@ def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
 
     records = store.load()
     assert len(records) == 1
-    assert records[0].topic_id == "mindset-reframing-self-doubt"
+    assert records[0].topic_id == "mindset-self-doubt"
     assert records[0].status == "draft"
 
 
 def test_run_generate_single_image_skips_hero_entirely(tmp_path):
     store = MemoryStore(path=tmp_path / "memory.json")
     seed = 0
-    draft_json = _single_image_draft_for_seed("mindset-reframing-self-doubt", seed)
+    draft_json = _single_image_draft_for_seed("mindset-self-doubt", seed)
     llm = _QueueLLM([json.dumps({"angle": "a specific test angle", "mood": "bold"}), draft_json])
     image = _FakeImage()
 
     result = asyncio.run(
         run_generate(
-            topic_id="mindset-reframing-self-doubt",
+            topic_id="mindset-self-doubt",
             format=Format.SINGLE_IMAGE,
             brand_kit=WGS_BRAND_KIT,
             topics_by_id=get_topics_by_id(),
@@ -161,7 +161,7 @@ def test_run_generate_reruns_of_same_topic_yield_different_angle(tmp_path):
     image = _FakeImage()
 
     kwargs = dict(
-        topic_id="mindset-reframing-self-doubt",
+        topic_id="mindset-self-doubt",
         format=Format.CAROUSEL,
         brand_kit=WGS_BRAND_KIT,
         topics_by_id=get_topics_by_id(),

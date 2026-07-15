@@ -1,284 +1,626 @@
-# 18 starter topics across WGS's seven categories.
+# 37 topic+category pairs, sourced verbatim from docs/taxonomy-draft-v1.md.
+# Schema simplification vs. the earlier 18-topic version: every row here has exactly
+# ONE category — `categories` is a single-item list and `primary_category` is that
+# same value, full stop. (The old file's multi-tag `categories` design is no longer
+# used; the same topic *name* can recur across categories, but each is authored here
+# as its own fully independent row/id — see the id-naming note below.)
 # `primary_category` must be one of `categories` (validated on load) — it's the single
 # category the masthead counts against (e.g. "MINDSET NO. 14").
 # Health topics carry sensitivity: health + requires_citation: true — no factual claim
 # about the body is ever made without a grounded source (blueprint Section 1, rule 6).
+# requires_citation/knowledge_hints follow the draft doc's "Fact-check" marking exactly.
 
-- id: mindset-reframing-self-doubt
-  name: Reframing Self-Doubt
+# ---------------------------------------------------------------------------
+# MINDSET (9 pairs)
+# ---------------------------------------------------------------------------
+
+- id: mindset-self-doubt
+  name: Self-Doubt
   categories: ["Mindset"]
   primary_category: "Mindset"
   tone_defaults: ["warm", "grounded"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the inner critic vs. the intuition that actually protects you
-    - self-doubt as a habit, not a fact
-    - what confident women do differently when doubt shows up
-    - the difference between healthy caution and self-sabotage
-  knowledge_hints:
-    - cognitive reframing techniques from CBT
-    - the negativity bias and why doubt feels "truer" than praise
+    - the inner critic that sounds like protection but isn't
+    - the difference between healthy caution and talking yourself out of everything
+    - what it feels like when your own voice doesn't sound like yours anymore
+    - confident women still doubt themselves — they just don't let it drive
+    - the moment you catch yourself apologizing for taking up space
+  knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
-- id: mindset-boundaries-without-guilt
-  name: Setting Boundaries Without Guilt
-  categories: ["Mindset", "Relationships"]
+- id: mindset-boundaries
+  name: Boundaries
+  categories: ["Mindset"]
   primary_category: "Mindset"
-  tone_defaults: ["direct", "warm"]
+  tone_defaults: ["warm", "grounded"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - why guilt shows up right when a boundary is working
+    - the guilt that shows up right when a boundary is finally working
     - boundaries as information, not punishment
-    - scripts for saying no without over-explaining
-    - the people-pleasing loop that boundaries interrupt
-  knowledge_hints:
-    - guilt as a socialized response to assertiveness in women
+    - the silence right after you say no for the first time
+    - unlearning the belief that a boundary makes you difficult
+    - what it costs you to keep being "easy"
+  knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
-- id: mindset-letting-go-of-perfectionism
-  name: Letting Go of Perfectionism
-  categories: ["Mindset", "Career"]
+- id: mindset-perfectionism
+  name: Perfectionism
+  categories: ["Mindset"]
   primary_category: "Mindset"
-  tone_defaults: ["grounded", "encouraging"]
+  tone_defaults: ["warm", "grounded"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
     - perfectionism as fear wearing a productive costume
-    - '"good enough" as a discipline, not a compromise'
-    - the perfectionist's procrastination trap
-    - what happens after you ship the imperfect thing
-  knowledge_hints:
-    - perfectionism's link to procrastination and burnout in research
+    - the belief that you have to earn rest by being flawless first
+    - what happens the day you let something be good enough
+    - the exhaustion of holding yourself to a standard no one else can see
+    - when "high standards" is actually just another word for never enough
+  knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
-- id: career-salary-negotiation
-  name: Negotiating Your Worth
+- id: mindset-imposter-syndrome
+  name: Imposter Syndrome
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the gap between what you've done and what you feel you deserve
+    - imposter syndrome as a sign you're growing, not failing
+    - the quiet fear that you'll be "found out" for being human
+    - one question to ask yourself before you spiral
+    - what it feels like to finally believe your own accomplishments
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: mindset-rest
+  name: Rest
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the belief that rest has to be earned before you deserve it
+    - what it feels like to finally let your mind go quiet
+    - the guilt that sneaks in the moment you stop being productive
+    - unlearning the idea that your value is measured in output
+    - permission to do nothing and still be enough
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: mindset-people-pleasing
+  name: People-Pleasing
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the habit of shrinking yourself so no one is ever upset with you
+    - what it feels like to disagree out loud for the first time
+    - the exhaustion of managing everyone's feelings but your own
+    - people-pleasing as a habit, not a personality trait
+    - the moment you realize being liked isn't the same as being known
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: mindset-attachment-styles
+  name: Attachment Styles
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the four attachment styles in plain language
+    - how your attachment style shows up when you're stressed, not when you're calm
+    - the pattern you keep repeating without realizing it's a pattern
+    - moving toward feeling secure in yourself, on purpose
+    - what secure attachment actually feels like in the body
+  knowledge_hints:
+    - attachment theory and adult attachment style research (secure, anxious, avoidant, disorganized styles)
+  requires_citation: true
+  sensitivity: normal
+
+- id: mindset-motivational
+  name: Motivational
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["warm", "encouraging"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - growth doesn't announce itself, it just quietly becomes the way you breathe
+    - you don't have to shrink to keep the peace
+    - some days strength looks like getting up, other days it looks like resting
+    - you're allowed to outgrow the version of you that survived last year
+    - the tears you're hiding today are proof you're finally listening to yourself
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: mindset-quirky-fun
+  name: Quirky/Fun
+  categories: ["Mindset"]
+  primary_category: "Mindset"
+  tone_defaults: ["playful", "direct"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the weird mental tricks that actually work better than willpower
+    - why your brain treats an unfinished text message like a tiny emergency
+    - the "main character energy" you didn't know you had access to
+    - a slightly unhinged pep talk for the version of you procrastinating right now
+    - the psychology behind why "just one more episode" always wins
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+# ---------------------------------------------------------------------------
+# CAREER (8 pairs)
+# ---------------------------------------------------------------------------
+
+- id: career-perfectionism
+  name: Perfectionism
   categories: ["Career"]
   primary_category: "Career"
   tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - why women are statistically less likely to negotiate
-    - the numbers you need before you ask
+    - the perfectionist's procrastination trap — the project you're still "not ready" to share
+    - what happens after you finally ship the imperfect draft
+    - the meeting you almost didn't speak in because it wasn't "polished" yet
+    - done beats perfect, especially when perfect never arrives
+    - the deadline that taught you good enough was actually good
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: career-pay-scale
+  name: Pay-scale
+  categories: ["Career"]
+  primary_category: "Career"
+  tone_defaults: ["direct", "grounded-in-facts"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the numbers you need before you ask for a raise
     - reframing negotiation as a conversation, not a confrontation
     - what to say when they push back
+    - the ask you rehearsed in the mirror before you finally made it
+    - you don't need permission to negotiate your worth
   knowledge_hints:
     - gender pay gap and negotiation-frequency research
   requires_citation: true
   sensitivity: normal
 
 - id: career-imposter-syndrome
-  name: Imposter Syndrome at Work
-  categories: ["Career", "Mindset"]
+  name: Imposter Syndrome
+  categories: ["Career"]
   primary_category: "Career"
-  tone_defaults: ["grounded", "supportive"]
+  tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the gap between competence and felt confidence
-    - imposter syndrome as a sign you're growing, not failing
-    - the difference between humility and self-erasure
-    - one question to ask before you spiral
-  knowledge_hints:
-    - the original Clance & Imes research on imposter phenomenon
+    - the gap between competence and felt confidence in the room
+    - the promotion you almost didn't apply for
+    - what it means when your work speaks louder than your doubt
+    - the humility that quietly turns into self-erasure
+    - one signal that you're ready, even if it doesn't feel like it
+  knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
 - id: career-office-politics
-  name: Navigating Office Politics
+  name: Office Politics
   categories: ["Career"]
   primary_category: "Career"
-  tone_defaults: ["direct", "calm"]
+  tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
     - being interrupted in meetings and how to reclaim the floor
-    - visibility work vs. actual work
-    - building allies without playing games
+    - visibility work vs. actual work — and why both matter
+    - building real allies without playing games
     - reading the room without losing yourself in it
+    - the email you rewrote four times before finally hitting send
   knowledge_hints:
-    - research on meeting interruption rates by gender
+    - research on meeting interruption and speaking-time gaps by gender in workplace settings
   requires_citation: true
   sensitivity: normal
 
-- id: wellness-burnout-recovery
-  name: Recovering From Burnout
-  categories: ["Wellness", "Career"]
-  primary_category: "Wellness"
-  tone_defaults: ["calm", "grounded"]
+- id: career-burnout
+  name: Burnout
+  categories: ["Career"]
+  primary_category: "Career"
+  tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
+    - the workload that crept up so slowly you didn't notice you were drowning
+    - why "just take the weekend off" doesn't fix real burnout
+    - the meeting that made you finally admit you're running on empty
+    - what it costs to always be "the reliable one"
     - burnout as a systems failure, not a personal one
-    - the early signs that get ignored
-    - what actual recovery requires vs. a weekend off
-    - rebuilding capacity without rebuilding the same schedule
   knowledge_hints:
     - WHO's definition of burnout as an occupational phenomenon
   requires_citation: true
   sensitivity: normal
 
-- id: wellness-rest-is-not-lazy
-  name: Rest Is Not Lazy
-  categories: ["Wellness", "Mindset"]
+- id: career-boundaries
+  name: Boundaries
+  categories: ["Career"]
+  primary_category: "Career"
+  tone_defaults: ["direct", "grounded-in-facts"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the boundary that finally stopped the after-hours emails from feeling like emergencies
+    - scripts for saying no at work without over-explaining
+    - what it feels like the first time you don't apologize for leaving on time
+    - a boundary at work isn't a favor you're asking for, it's information
+    - the "yes" you almost gave out of habit, not honesty
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: career-motivational
+  name: Motivational
+  categories: ["Career"]
+  primary_category: "Career"
+  tone_defaults: ["warm", "encouraging"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the average woman changes careers more than once — you're not behind, you're building
+    - financial freedom often comes later than people expect — you're on time
+    - the job you almost didn't apply for because you didn't feel "ready" yet
+    - small consistent effort quietly outperforms burnout every time
+    - trust the timeline you're actually on, not the one you're comparing yourself to
+  knowledge_hints:
+    - use only well-established, general research on career-change timing, business-founding age, and financial milestones — never a fabricated precise statistic
+  requires_citation: true
+  sensitivity: normal
+
+- id: career-quirky-fun
+  name: Quirky/Fun
+  categories: ["Career"]
+  primary_category: "Career"
+  tone_defaults: ["playful", "direct"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the very specific chaos of pretending you know what a reply-all thread is about
+    - "career horoscopes: what your job would say about you if it could talk"
+    - the office plant that has survived more reorganizations than most managers
+    - a slightly unhinged ranking of the most passive-aggressive email sign-offs
+    - what your Slack status says about you that your resume doesn't
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+# ---------------------------------------------------------------------------
+# WELLNESS (5 pairs)
+# ---------------------------------------------------------------------------
+
+- id: wellness-burnout
+  name: Burnout
+  categories: ["Wellness"]
+  primary_category: "Wellness"
+  tone_defaults: ["calm", "grounded-in-facts"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - your body sends warning signs weeks before you actually crash — what those look like
+    - the difference between being tired and being depleted
+    - burnout isn't a mood, it's a nervous-system state, not a personal failing
+    - the exhaustion that doesn't lift even after a full weekend of rest
+    - what it feels like to not recognize your own energy anymore
+    - learning to rest before you're forced to
+  knowledge_hints:
+    - WHO's definition of burnout as an occupational phenomenon
+  requires_citation: true
+  sensitivity: normal
+
+- id: wellness-rest
+  name: Rest
+  categories: ["Wellness"]
   primary_category: "Wellness"
   tone_defaults: ["calm", "encouraging"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - rest as maintenance, not a reward you have to earn
-    - the hustle-culture myth of constant output
-    - what rest looks like when it isn't a nap
-    - unlearning productivity guilt
-  knowledge_hints:
-    - the physiological cost of chronic under-recovery
+    - rest is maintenance, not a reward you have to earn
+    - what rest actually looks like when it isn't a nap or a scroll session
+    - the guilt that shows up the moment you finally stop
+    - why doing "nothing" can feel more frightening than doing everything
+    - unlearning the belief that your worth is tied to your output
+    - the quiet relief of finally giving yourself permission to stop
+  knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
 - id: wellness-stress-regulation
-  name: Regulating Stress in the Body
+  name: Stress Regulation
   categories: ["Wellness"]
   primary_category: "Wellness"
-  tone_defaults: ["calm", "grounded"]
+  tone_defaults: ["calm", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the nervous system doesn't know the difference between a deadline and a threat
-    - simple resets that work in under two minutes
+    - your nervous system doesn't know the difference between a deadline and a real threat
+    - simple resets that work in under two minutes when you're spiraling
     - stress as a body signal, not a character flaw
     - the difference between calming down and shutting down
+    - what it feels like when your body finally exhales after weeks of bracing
+    - the tightness in your chest you stopped noticing because it's been there so long
   knowledge_hints:
     - polyvagal theory basics and nervous-system regulation techniques
   requires_citation: true
   sensitivity: normal
 
-- id: health-hormonal-cycle-basics
-  name: Understanding Your Hormonal Cycle
+- id: wellness-sleep
+  name: Sleep
+  categories: ["Wellness"]
+  primary_category: "Wellness"
+  tone_defaults: ["calm", "grounded-in-facts"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the habits that actually move the needle, not just "go to bed earlier"
+    - why one bad night can wreck your mood more than your energy
+    - the 2am wide-awake spiral and what's actually happening in your body then
+    - learning to protect your wind-down time like it's a real appointment
+    - the relief of finally sleeping through the night after weeks of not
+  knowledge_hints:
+    - sleep hygiene and circadian rhythm research; the physiological cost of chronic sleep disruption
+  requires_citation: true
+  sensitivity: normal
+
+- id: wellness-motivational
+  name: Motivational
+  categories: ["Wellness"]
+  primary_category: "Wellness"
+  tone_defaults: ["warm", "encouraging"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - your body isn't failing you, it's asking you to slow down
+    - small consistency beats big burnout every time
+    - the quiet pride of choosing rest before you're forced to
+    - you don't have to earn the right to feel good
+    - the version of you that takes care of her body first, not last
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+# ---------------------------------------------------------------------------
+# WOMEN'S HEALTH (3 pairs)
+# ---------------------------------------------------------------------------
+
+- id: health-hormonal-cycle
+  name: Hormonal Cycle
   categories: ["Women's Health"]
   primary_category: "Women's Health"
-  tone_defaults: ["grounded-in-facts", "calm"]
+  tone_defaults: ["calm", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
     - the four cycle phases and what actually changes in each
-    - why energy and mood shift across the month
-    - working with your cycle instead of against it
-    - common myths about "that time of the month"
+    - why energy and mood genuinely shift across the month, not "just because"
+    - working with your cycle instead of constantly fighting it
+    - common myths about "that time of the month," corrected
+    - the day in your cycle you finally understood why you felt different
   knowledge_hints:
     - menstrual cycle physiology, phase-by-phase hormonal shifts
   requires_citation: true
   sensitivity: health
 
-- id: health-reproductive-literacy
-  name: Reproductive Health Literacy
+- id: health-reproductive-health
+  name: Reproductive Health
   categories: ["Women's Health"]
   primary_category: "Women's Health"
   tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - questions worth asking at an annual exam
-    - what's normal vs. what's worth a doctor's visit
-    - decoding common lab results and terms
-    - myths that keep women from seeking care early
+    - questions worth asking at your next annual exam
+    - what's normal vs. what's actually worth a doctor's visit
+    - decoding the lab results and terms nobody explains clearly
+    - the myths that keep women from seeking care early
+    - the appointment you almost canceled that turned out to matter
   knowledge_hints:
     - ACOG patient-education guidance on routine reproductive care
   requires_citation: true
   sensitivity: health
 
-- id: health-sleep-and-hormones
-  name: Sleep and Hormonal Health
-  categories: ["Women's Health", "Wellness"]
+- id: health-sleep
+  name: Sleep
+  categories: ["Women's Health"]
   primary_category: "Women's Health"
   tone_defaults: ["calm", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - how hormonal shifts disrupt sleep across the cycle
-    - the sleep habits that actually move the needle
-    - why "just go to bed earlier" misses the point
-    - the link between poor sleep and mood/energy crashes
+    - how hormonal shifts disrupt sleep at specific points in your cycle
+    - why "just go to bed earlier" misses the real hormonal picture
+    - the link between poor sleep and mood crashes you didn't connect before
+    - the night your body just wouldn't let you sleep, and why
+    - learning to expect and plan around your body's sleep shifts
   knowledge_hints:
     - research on menstrual-cycle-linked sleep architecture changes
   requires_citation: true
   sensitivity: health
 
-- id: relationships-people-pleasing
-  name: Unlearning People-Pleasing in Relationships
-  categories: ["Relationships", "Mindset"]
+# ---------------------------------------------------------------------------
+# RELATIONSHIPS (7 pairs)
+# ---------------------------------------------------------------------------
+
+- id: relationships-boundaries
+  name: Boundaries
+  categories: ["Relationships"]
   primary_category: "Relationships"
   tone_defaults: ["warm", "grounded"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the fawn response and where it comes from
-    - the cost of being "easy" in every relationship
-    - what it feels like the first time you disappoint someone on purpose
-    - rebuilding a relationship with your own preferences
-  knowledge_hints:
-    - fawning as a trauma response alongside fight/flight/freeze
-  requires_citation: false
-  sensitivity: normal
-
-- id: relationships-friendship-boundaries
-  name: Boundaries in Friendship
-  categories: ["Relationships"]
-  primary_category: "Relationships"
-  tone_defaults: ["warm", "direct"]
-  suitable_formats: ["carousel", "single_image"]
-  seed_angles:
     - the friendship you keep out of history, not connection
-    - what a one-sided friendship actually costs you
-    - saying less and meaning it
-    - outgrowing a friend group without a blow-up
+    - what a one-sided friendship actually costs you over time
+    - saying less to someone and actually meaning it
+    - outgrowing a friend group without a dramatic blow-up
+    - the boundary that finally made a relationship feel equal again
   knowledge_hints: []
   requires_citation: false
   sensitivity: normal
 
-- id: relationships-attachment-styles
-  name: Understanding Attachment Styles
-  categories: ["Relationships", "Mindset"]
+- id: relationships-burnout
+  name: Burnout
+  categories: ["Relationships"]
   primary_category: "Relationships"
-  tone_defaults: ["grounded-in-facts", "calm"]
+  tone_defaults: ["warm", "grounded"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the four attachment styles in plain language
-    - how your style shows up when you're stressed, not when you're calm
-    - anxious-avoidant pairings and why they feel so familiar
-    - moving toward a secure attachment style on purpose
+    - the guilt of resenting the people you love for needing you
+    - emotional labor exhaustion nobody sees or thanks you for
+    - the friend who's always "fine" because she's never allowed not to be
+    - what it costs to be everyone's soft place to land
+    - caregiver burnout is still burnout, even when it's out of love
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: relationships-people-pleasing
+  name: People-Pleasing
+  categories: ["Relationships"]
+  primary_category: "Relationships"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the fawn response and where it actually comes from
+    - the cost of being "easy" in every relationship you're in
+    - what it feels like the first time you disappoint someone on purpose
+    - rebuilding a relationship with your own preferences
+    - the relationship where you finally said what you actually wanted
+  knowledge_hints:
+    - fawning as a trauma response alongside fight/flight/freeze
+  requires_citation: true
+  sensitivity: normal
+
+- id: relationships-attachment-styles
+  name: Attachment Styles
+  categories: ["Relationships"]
+  primary_category: "Relationships"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the anxious-avoidant pairing and why it feels so painfully familiar
+    - how your attachment style shows up in a fight, not in the honeymoon phase
+    - the relationship pattern you keep calling "bad luck"
+    - moving toward a secure relationship on purpose, not by accident
+    - the text you reread five times before deciding what it meant
   knowledge_hints:
     - attachment theory, adult attachment style research
   requires_citation: true
   sensitivity: normal
 
-- id: society-gender-pay-gap
-  name: The Gender Pay Gap
-  categories: ["Society", "Career"]
+- id: relationships-invisible-labor
+  name: Invisible Labor
+  categories: ["Relationships"]
+  primary_category: "Relationships"
+  tone_defaults: ["warm", "grounded"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the mental load as a second, unpaid job nobody clocks in for
+    - why "just ask for help" misses the actual problem
+    - what fair division of labor actually looks like, in practice
+    - naming invisible work out loud, without turning it into a fight
+    - the list in your head that never actually ends
+  knowledge_hints:
+    - time-use survey research on unpaid domestic and emotional labor within households
+  requires_citation: true
+  sensitivity: normal
+
+- id: relationships-motivational
+  name: Motivational
+  categories: ["Relationships"]
+  primary_category: "Relationships"
+  tone_defaults: ["warm", "encouraging"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the friendship that took years to find and was worth every one of them
+    - you're allowed to outgrow people who only loved the smaller version of you
+    - the love you give yourself sets the standard for what you'll accept
+    - some relationships are seasons, not life sentences, and that's okay
+    - the day you realized you deserved the same grace you give everyone else
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+- id: relationships-quirky-fun
+  name: Quirky/Fun
+  categories: ["Relationships"]
+  primary_category: "Relationships"
+  tone_defaults: ["playful", "direct"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - a very accurate breakdown of texting personalities and what they reveal
+    - the group chat argument that lasted three days over nothing
+    - red flag or just introverted? a highly unscientific quiz
+    - the friendship rituals that make no sense to anyone outside it
+    - what your love language actually says about your snack preferences
+  knowledge_hints: []
+  requires_citation: false
+  sensitivity: normal
+
+# ---------------------------------------------------------------------------
+# SOCIETY (3 pairs)
+# ---------------------------------------------------------------------------
+
+- id: society-pay-scale
+  name: Pay-scale
+  categories: ["Society"]
   primary_category: "Society"
   tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
     - what the raw pay-gap number does and doesn't tell you
-    - where the gap widens most across a career
-    - the motherhood penalty vs. the fatherhood bonus
-    - what closes the gap fastest, per the research
+    - where the gap actually widens most across a career
+    - the motherhood penalty vs. the fatherhood bonus, side by side
+    - what closes the gap fastest, according to the research
+    - the number that made you stop and do the math on your own paycheck
   knowledge_hints:
     - national labor statistics on the gender pay gap by age and industry
   requires_citation: true
   sensitivity: normal
 
 - id: society-invisible-labor
-  name: The Unpaid Labor Gap
-  categories: ["Society", "Relationships"]
+  name: Invisible Labor
+  categories: ["Society"]
   primary_category: "Society"
-  tone_defaults: ["direct", "warm"]
+  tone_defaults: ["direct", "grounded-in-facts"]
   suitable_formats: ["carousel", "single_image"]
   seed_angles:
-    - the mental load as a second, unpaid job
-    - why "just ask for help" misses the real problem
-    - what fair division of labor actually looks like
-    - naming invisible work out loud, without a fight
+    - the unpaid labor gap, measured in actual hours per week
+    - why care work still isn't counted as real economic output
+    - the policy gap between countries that support caregivers and those that don't
+    - what changes when unpaid labor finally gets counted
+    - the quiet cost an entire economy runs on and never pays for
   knowledge_hints:
-    - time-use survey research on unpaid domestic labor by gender
+    - time-use survey research on unpaid domestic labor by gender, and cross-country policy comparisons on caregiver support
   requires_citation: true
   sensitivity: normal
 
+- id: society-quirky-fun
+  name: Quirky/Fun
+  categories: ["Society"]
+  primary_category: "Society"
+  tone_defaults: ["playful", "direct"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - a highly specific ranking of things society still finds "unladylike" for no reason
+    - the surprisingly recent year women could do things you'd assume were always allowed
+    - gender norms, ranked by how little sense they actually make
+    - the outdated etiquette rule nobody remembers agreeing to
+    - society's double standards, translated into plain, slightly petty language
+  knowledge_hints:
+    - verified historical/legal facts only (e.g. dates specific legal rights were granted) — must match real historical record, never invented or approximated
+  requires_citation: true
+  sensitivity: normal
+
+# ---------------------------------------------------------------------------
+# INSPIRING WOMEN (2 pairs)
+# ---------------------------------------------------------------------------
+
 - id: inspiring-women-who-changed-history
   name: Women Who Changed History
-  categories: ["Inspiring Women", "Society"]
+  categories: ["Inspiring Women"]
   primary_category: "Inspiring Women"
   tone_defaults: ["encouraging", "warm"]
   suitable_formats: ["carousel", "single_image"]
@@ -287,7 +629,25 @@
     - the setback right before her breakthrough
     - what she did with no one backing her yet
     - the version of the story that gets left out of textbooks
+    - the door she opened that you now walk through without thinking about it
   knowledge_hints:
     - biographical facts must be sourced — never invented from memory
+  requires_citation: true
+  sensitivity: normal
+
+- id: inspiring-women-quirky-fun
+  name: Quirky/Fun
+  categories: ["Inspiring Women"]
+  primary_category: "Inspiring Women"
+  tone_defaults: ["playful", "direct"]
+  suitable_formats: ["carousel", "single_image"]
+  seed_angles:
+    - the surprisingly petty rivalry between two historical women who changed everything anyway
+    - the wildly unrelated day-job she had before the thing she's now famous for
+    - a "no way that's true" historical fact about a woman you thought you knew
+    - the detail history conveniently left out of the textbook version
+    - the rejection she got before the thing she's now famous for
+  knowledge_hints:
+    - verified biographical facts and documented anecdotes only — never invented or embellished, even for a 'fun fact' framing
   requires_citation: true
   sensitivity: normal

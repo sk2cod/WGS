@@ -10,7 +10,7 @@ from app.taxonomy.loader import get_topics_by_id
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 
-def _brief(topic_id="mindset-reframing-self-doubt", approach=Approach.STORY, format=Format.CAROUSEL):
+def _brief(topic_id="mindset-self-doubt", approach=Approach.STORY, format=Format.CAROUSEL):
     return build_brief(
         topic_id=topic_id,
         topics_by_id=get_topics_by_id(),
@@ -62,12 +62,12 @@ def test_validate_post_flags_word_limit():
 
 
 def test_validate_post_passes_citation_required_topic_grounded_by_knowledge_hints():
-    """Logbook #14: career-salary-negotiation requires_citation, but build_brief()
+    """Logbook #14: career-pay-scale requires_citation, but build_brief()
     now threads topic.knowledge_hints into the brief — sources stays empty by
     design (taxonomy topics never carry real Source objects) and that's correct,
     not a validation failure."""
     brief = _brief(
-        topic_id="career-salary-negotiation",
+        topic_id="career-pay-scale",
         approach=Approach.EDUCATIONAL,
         format=Format.SINGLE_IMAGE,
     )

@@ -26,5 +26,5 @@ def test_topics_route_returns_full_catalog():
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 18
+    assert len(body) == 37
     assert {"id", "name", "categories", "primary_category"} <= body[0].keys()

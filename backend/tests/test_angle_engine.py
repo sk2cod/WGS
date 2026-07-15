@@ -34,7 +34,7 @@ def _used_record(topic_id: str, sub: str, approach: str) -> MemoryRecord:
 
 
 def test_sample_cell_excludes_used_fingerprints():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     target_sub = topic.seed_angles[0]
 
     used = [
@@ -50,7 +50,7 @@ def test_sample_cell_excludes_used_fingerprints():
 
 
 def test_sample_cell_falls_back_to_full_pool_when_topic_exhausted():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     used = [_used_record(topic.id, sub, a) for sub in topic.seed_angles for a in APPROACHES]
 
     # every combo for this topic is "used" — sample_cell must still return something
@@ -60,7 +60,7 @@ def test_sample_cell_falls_back_to_full_pool_when_topic_exhausted():
 
 
 def test_generate_angle_parses_json_and_tags_mood():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _FakeLLM(json.dumps({"angle": "a very specific angle", "mood": "bold"}))
     result = generate_angle(topic, [], llm, rng=random.Random(1))
     assert result.angle == "a very specific angle"
@@ -69,14 +69,14 @@ def test_generate_angle_parses_json_and_tags_mood():
 
 
 def test_generate_angle_falls_back_to_wisdom_on_invalid_mood():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _FakeLLM(json.dumps({"angle": "specific angle", "mood": "sad"}))
     result = generate_angle(topic, [], llm, rng=random.Random(2))
     assert result.mood == DEFAULT_MOOD
 
 
 def test_generate_angle_falls_back_on_malformed_json():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _FakeLLM("not json at all")
     result = generate_angle(topic, [], llm, rng=random.Random(3))
     assert result.mood == DEFAULT_MOOD
@@ -85,7 +85,7 @@ def test_generate_angle_falls_back_on_malformed_json():
 
 
 def test_generate_angle_strips_markdown_fence():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     payload = json.dumps({"angle": "fenced angle", "mood": "celebratory"})
     llm = _FakeLLM(f"```json\n{payload}\n```")
     result = generate_angle(topic, [], llm, rng=random.Random(4))
@@ -94,7 +94,7 @@ def test_generate_angle_strips_markdown_fence():
 
 
 def test_generate_angle_parses_visual_subject():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _FakeLLM(
         json.dumps(
             {
@@ -109,7 +109,7 @@ def test_generate_angle_parses_visual_subject():
 
 
 def test_generate_angle_visual_subject_falls_back_to_sub_concept_when_missing():
-    topic = get_topics_by_id()["mindset-reframing-self-doubt"]
+    topic = get_topics_by_id()["mindset-self-doubt"]
     llm = _FakeLLM(json.dumps({"angle": "a very specific angle", "mood": "bold"}))
     result = generate_angle(topic, [], llm, rng=random.Random(1))
     assert result.visual_subject == result.sub_concept

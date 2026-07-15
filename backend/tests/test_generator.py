@@ -60,7 +60,7 @@ class _QueueLLM:
 
 def _sample_brief():
     return build_brief(
-        topic_id="mindset-reframing-self-doubt",
+        topic_id="mindset-self-doubt",
         topics_by_id=get_topics_by_id(),
         angle="the inner critic vs. the intuition that actually protects you",
         approach=Approach.STORY,
@@ -73,7 +73,7 @@ def _sample_brief():
 
 def _non_teaching_brief():
     return build_brief(
-        topic_id="mindset-reframing-self-doubt",
+        topic_id="mindset-self-doubt",
         topics_by_id=get_topics_by_id(),
         angle="what confident women do differently when doubt shows up",
         approach=Approach.QUESTION_REFLECTION,
@@ -86,7 +86,7 @@ def _non_teaching_brief():
 
 def _citation_required_brief():
     return build_brief(
-        topic_id="career-salary-negotiation",
+        topic_id="career-pay-scale",
         topics_by_id=get_topics_by_id(),
         angle="the numbers you need before you ask",
         approach=Approach.EDUCATIONAL,
@@ -184,7 +184,7 @@ def _sample_draft() -> GeneratedPost:
 
 
 def test_critique_asks_for_knowledge_hints_check_when_required_without_sources():
-    """Logbook #14: taxonomy topics (career-salary-negotiation has knowledge_hints,
+    """Logbook #14: taxonomy topics (career-pay-scale has knowledge_hints,
     ContentBrief.sources is always [] here) must get knowledge_hints-grounded
     critique language, not the source-traceability instruction — there are no
     sources to trace to outside the paste-link flow, and asking for that
