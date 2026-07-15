@@ -8,11 +8,11 @@ import json
 import random
 from dataclasses import dataclass
 
-from app.models.enums import Approach, EntryPoint
+from app.models.enums import Approach, EntryPoint, Format
 from app.models.memory import MemoryRecord
 from app.models.topic import Topic
 from app.providers.llm import LLMProvider, strip_json_fence
-from app.taxonomy.approaches import APPROACHES
+from app.taxonomy.approaches import APPROACHES, SINGLE_IMAGE_SAFE_APPROACHES
 from app.taxonomy.entry_points import ENTRY_POINTS
 
 VALID_MOODS = {"wisdom", "bold", "celebratory"}
@@ -39,18 +39,27 @@ def sample_cell(
     topic: Topic,
     memory: list[MemoryRecord],
     *,
+    format: Format | None = None,
     rng: random.Random | None = None,
 ) -> tuple[str, Approach, EntryPoint]:
     """Pick one (sub-concept, approach, entry-point) cell, excluding combinations whose
     topic+sub-concept+approach fingerprint already appears in this topic's memory. Falls
-    back to the full pool once every combination for this topic has been used."""
+    back to the full pool once every combination for this topic has been used.
+
+    `format` narrows which approaches are eligible: single_image resolves to exactly one
+    slide, which some approaches structurally can't fit (see
+    taxonomy/approaches.py:SINGLE_IMAGE_SAFE_APPROACHES). `format=None` (the daily-picks
+    pitch path, where no format has been chosen yet) samples unrestricted, same as
+    carousel."""
     rng = rng or random.Random()
     used_fingerprints = {r.fingerprint for r in memory if r.topic_id == topic.id}
+
+    allowed_approaches = SINGLE_IMAGE_SAFE_APPROACHES if format == Format.SINGLE_IMAGE else APPROACHES
 
     candidates = [
         (sub, Approach(a), EntryPoint(e))
         for sub in topic.seed_angles
-        for a in APPROACHES
+        for a in allowed_approaches
         for e in ENTRY_POINTS
     ]
     unused = [c for c in candidates if _fingerprint(topic.id, c[0], c[1]) not in used_fingerprints]
@@ -91,9 +100,10 @@ def generate_angle(
     memory: list[MemoryRecord],
     llm: LLMProvider,
     *,
+    format: Format | None = None,
     rng: random.Random | None = None,
 ) -> SampledAngle:
-    sub_concept, approach, entry_point = sample_cell(topic, memory, rng=rng)
+    sub_concept, approach, entry_point = sample_cell(topic, memory, format=format, rng=rng)
 
     system = (
         "You write specific, concrete content angles for a single Instagram post — "

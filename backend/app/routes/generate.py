@@ -203,7 +203,9 @@ async def run_generate(
         raise KeyError(f"Unknown topic_id: {topic_id!r}")
 
     memory = store.load()
-    sampled = preselected if preselected is not None else generate_angle(topic, memory, llm, rng=rng)
+    sampled = (
+        preselected if preselected is not None else generate_angle(topic, memory, llm, format=format, rng=rng)
+    )
 
     brief_result = build_brief(
         topic_id=topic.id,
@@ -243,7 +245,7 @@ async def propose(request: ProposeRequest) -> ProposeResponse:
         raise HTTPException(status_code=404, detail=f"Unknown topic_id: {request.topic_id!r}")
 
     memory = MemoryStore().load()
-    sampled = await asyncio.to_thread(generate_angle, topic, memory, LLMProvider())
+    sampled = await asyncio.to_thread(generate_angle, topic, memory, LLMProvider(), format=request.format)
     return ProposeResponse(
         topic_id=topic.id,
         topic_name=topic.name,

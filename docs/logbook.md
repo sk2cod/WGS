@@ -883,6 +883,111 @@ orphaned.
 
 ---
 
+## 26. `single_image` generation crashing on certain approaches — approach sampled before format is known
+
+**Symptom:** generating a `single_image` post could fail with a hard parse
+error (`ValueError: expected 1 slide(s) (['single_stat']), got [...]`) —
+the model returned multiple slide-like objects (with off-schema
+`template_id`s like `checklist`, `myth_fact`, `tip`, or several
+`single_stat` objects labeled `STEP 1`–`STEP 4`) instead of the one slide
+`single_image` requires. First surfaced while testing the (separately
+in-flight, not yet committed as of this entry) 37-pair taxonomy
+replacement, then investigated and confirmed as a pre-existing,
+taxonomy-independent bug — reproducible against the old 18-topic taxonomy
+just as easily (see the isolated regression check below).
+
+**Investigation:** traced the sampling call chain read-only before
+changing anything. `angle_engine.py`'s `sample_cell()`/`generate_angle()`
+picks an approach purely from `topic.seed_angles × APPROACHES (all 8) ×
+ENTRY_POINTS` — `format` was never a parameter anywhere in that file.
+`format` is known to the caller (`routes/generate.py`'s `run_generate()`,
+which receives it as a plain argument) at the exact same point
+`generate_angle()` gets called, but the plumbing simply never passed it
+down; `format` was only used afterward, in `brief_builder.py`, to compute
+`slide_count` — by then the approach was already irreversibly sampled.
+`generator.py`'s `slide_roles_for()` collapses `single_image` to exactly
+one slide role (`single_quote` for the poetic register, `single_stat` for
+the direct register) regardless of which approach got sampled.
+
+Deliberately tested all 8 approaches forced onto `single_image` (multiple
+live `/generate` trials per approach, not assumed from reading the code):
+`checklist`, `myth_vs_fact`, and `framework` reliably crashed — each has a
+`_APPROACH_DEFINITIONS` entry (`generator.py`) that explicitly demands
+multiple distinct sub-items (an "enumerable set," "distinct labeled
+parts," or a separate myth + fact), which cannot compress into
+`single_stat`'s one kicker/number/supporting-line. `educational` crashed
+intermittently (1 of 4 trials — same multi-step tendency, less reliably
+triggered). `common_mistakes`, `stat_research`, `story`, and
+`question_reflection` never crashed across 4 trials each — structurally
+closer to "one fact/moment + one interpretation," which fits the 1-slide
+shape.
+
+**Root cause:** approach gets sampled with no knowledge of format, so
+nothing stops the sampler from picking an approach whose own structural
+definition is incompatible with `single_image`'s hard 1-slide ceiling.
+
+**Fix — Python-side, deterministic, no LLM prompt or slide template
+changes:**
+- `taxonomy/approaches.py`: added `SINGLE_IMAGE_SAFE_APPROACHES` — the 4
+  approaches confirmed safe by live testing (`common_mistakes`,
+  `stat_research`, `story`, `question_reflection`), as a named constant
+  next to `APPROACHES`/`TEACHING_BODY_APPROACHES`, not an inline list
+  buried in the sampler.
+- `angle_engine.py`: `sample_cell()`/`generate_angle()` now take an
+  optional `format` parameter; when `format == Format.SINGLE_IMAGE`, the
+  candidate pool is built from `SINGLE_IMAGE_SAFE_APPROACHES` only,
+  otherwise (including `format=None`) from the full `APPROACHES` list —
+  unchanged behavior for carousel and for the one caller that doesn't
+  know format yet (`selector.py`'s `build_daily_pick()`, which
+  precomputes only a hook + thumbnail before a format is chosen — left
+  passing no `format`, so it stays unrestricted, matching current
+  behavior).
+- `routes/generate.py`: both call sites that already had `format` in
+  scope (`propose()` and `run_generate()`) now pass it through to
+  `generate_angle()`. `propose()` matters as much as `run_generate()`
+  here — it's what actually populates the `preselected` angle a real
+  client accepts and later replays into `/generate`, so constraining it
+  too means a real client can never end up with an unsafe
+  approach+`single_image` pairing via the normal accept flow.
+
+**Verified:**
+- Deterministic pool-membership check: none of `checklist`/`myth_vs_fact`/
+  `framework`/`educational` appear in any topic's `single_image` candidate
+  pool; 500 sampling trials across seeds 0–499 with `format=SINGLE_IMAGE`
+  never produced anything outside the 4 safe approaches.
+- Forcing the 4 excluded approaches directly via `preselected` (bypassing
+  the sampler on purpose, the same method used to find the bug) still
+  reproduces the original crash for at least one of them in a single
+  trial — confirming the fix constrains the *sampler*, not the
+  generation path itself, exactly as scoped.
+- 6 real, unforced `/generate` calls across different topics on
+  `single_image` with the new pool — 0 crashes, 0 validation errors,
+  every sampled approach drawn from the safe set.
+- Carousel format re-verified unrestricted: 200 sampling trials still
+  reach all 8 approaches; real `/generate` calls forcing `checklist` and
+  `framework` onto carousel both completed normally (3–4 slides, only
+  unrelated minor validation findings — a forbidden-phrase hit and a
+  word-count overage).
+- Isolated regression check: stashed the (separately in-flight, not yet
+  committed) topics.yaml replacement and ran the full suite against the
+  *old* taxonomy with only this fix applied — **111/111 passing**,
+  confirming zero regressions from this change on its own (one test
+  helper, `test_generate_route.py::_single_image_draft_for_seed`, needed
+  a one-line update to pass `format=Format.SINGLE_IMAGE` into its own
+  `sample_cell()` call so it predicts the same approach the real
+  now-constrained path will sample for a given seed — a direct,
+  necessary consequence of this fix, not unrelated drift).
+
+**Not a blueprint deviation.** Consistent with blueprint decision 3 —
+"Python owns the brief and its constraints; the LLM generates inside it"
+— slide shape was already Python-decided and deterministic
+(`slide_roles_for`); this fix makes the *approach selection* upstream of
+it respect that same constraint instead of leaving Python and the model
+to independently discover the conflict downstream, one crashed request at
+a time.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |

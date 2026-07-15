@@ -85,7 +85,7 @@ def _single_image_draft_for_seed(topic_id: str, seed: int) -> str:
     voice register — sample with the same seed the test will pass to run_generate so
     the canned draft JSON matches whatever role actually gets requested."""
     topic = get_topics_by_id()[topic_id]
-    _, approach, _ = sample_cell(topic, [], rng=random.Random(seed))
+    _, approach, _ = sample_cell(topic, [], format=Format.SINGLE_IMAGE, rng=random.Random(seed))
     register = APPROACH_REGISTER[approach.value]
     return _DRAFT_SINGLE_QUOTE_JSON if register == "poetic" else _DRAFT_SINGLE_STAT_JSON
 
