@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generatePost, proposeApproach } from "@/lib/api";
-import type { ApiFormat, ProposeResponse } from "@/lib/api-types";
+import type { ApiFormat, ProposeResponse, SingleImageStyle } from "@/lib/api-types";
 import { saveCurrentPost } from "@/lib/session-store";
 import {
   cardStyle,
@@ -39,6 +39,7 @@ function GenerateScreen() {
   const topicId = searchParams.get("topic_id");
 
   const [format, setFormat] = useState<ApiFormat>("carousel");
+  const [singleImageStyle, setSingleImageStyle] = useState<SingleImageStyle>("quote");
   const [proposal, setProposal] = useState<ProposeResponse | null>(null);
   const [proposing, setProposing] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -48,14 +49,16 @@ function GenerateScreen() {
     if (!topicId) return;
     void loadProposal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicId, format]);
+  }, [topicId, format, singleImageStyle]);
 
   async function loadProposal() {
     if (!topicId) return;
     setProposing(true);
     setError(null);
     try {
-      setProposal(await proposeApproach(topicId, format));
+      setProposal(
+        await proposeApproach(topicId, format, format === "single_image" ? singleImageStyle : undefined),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -68,13 +71,18 @@ function GenerateScreen() {
     setGenerating(true);
     setError(null);
     try {
-      const generated = await generatePost(topicId, format, {
-        angle: proposal.angle,
-        approach: proposal.approach,
-        mood: proposal.mood,
-        visual_subject: proposal.visual_subject,
-        fingerprint: proposal.fingerprint,
-      });
+      const generated = await generatePost(
+        topicId,
+        format,
+        {
+          angle: proposal.angle,
+          approach: proposal.approach,
+          mood: proposal.mood,
+          visual_subject: proposal.visual_subject,
+          fingerprint: proposal.fingerprint,
+        },
+        format === "single_image" ? singleImageStyle : undefined,
+      );
       saveCurrentPost(generated);
       router.push("/editor");
     } catch (err) {
@@ -117,6 +125,29 @@ function GenerateScreen() {
           Single image
         </button>
       </section>
+
+      {format === "single_image" && (
+        <section style={{ display: "flex", gap: 8 }}>
+          <button
+            style={{
+              ...(singleImageStyle === "quote" ? primaryButtonStyle : secondaryButtonStyle),
+              flex: 1,
+            }}
+            onClick={() => setSingleImageStyle("quote")}
+          >
+            Poetic Quote
+          </button>
+          <button
+            style={{
+              ...(singleImageStyle === "stat" ? primaryButtonStyle : secondaryButtonStyle),
+              flex: 1,
+            }}
+            onClick={() => setSingleImageStyle("stat")}
+          >
+            Quick Stat
+          </button>
+        </section>
+      )}
 
       {error && <ErrorBanner message={error} />}
 

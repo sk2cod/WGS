@@ -7,13 +7,21 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass
+from typing import Literal
 
 from app.models.enums import Approach, EntryPoint, Format
 from app.models.memory import MemoryRecord
 from app.models.topic import Topic
 from app.providers.llm import LLMProvider, strip_json_fence
-from app.taxonomy.approaches import APPROACHES, SINGLE_IMAGE_SAFE_APPROACHES
+from app.taxonomy.approaches import (
+    APPROACHES,
+    SINGLE_IMAGE_QUOTE_APPROACHES,
+    SINGLE_IMAGE_SAFE_APPROACHES,
+    SINGLE_IMAGE_STAT_APPROACHES,
+)
 from app.taxonomy.entry_points import ENTRY_POINTS
+
+SingleImageStyle = Literal["quote", "stat"]
 
 VALID_MOODS = {"wisdom", "bold", "celebratory"}
 DEFAULT_MOOD = "wisdom"
@@ -40,6 +48,7 @@ def sample_cell(
     memory: list[MemoryRecord],
     *,
     format: Format | None = None,
+    single_image_style: SingleImageStyle | None = None,
     rng: random.Random | None = None,
 ) -> tuple[str, Approach, EntryPoint]:
     """Pick one (sub-concept, approach, entry-point) cell, excluding combinations whose
@@ -50,11 +59,24 @@ def sample_cell(
     slide, which some approaches structurally can't fit (see
     taxonomy/approaches.py:SINGLE_IMAGE_SAFE_APPROACHES). `format=None` (the daily-picks
     pitch path, where no format has been chosen yet) samples unrestricted, same as
-    carousel."""
+    carousel.
+
+    `single_image_style` further narrows the single_image pool to just the quote-style
+    or stat-style half (logbook #28) when she's chosen "Poetic Quote"/"Quick Stat" up
+    front — ignored unless format is single_image; leaving it unset preserves today's
+    behavior of sampling from the full 4-approach safe pool."""
     rng = rng or random.Random()
     used_fingerprints = {r.fingerprint for r in memory if r.topic_id == topic.id}
 
-    allowed_approaches = SINGLE_IMAGE_SAFE_APPROACHES if format == Format.SINGLE_IMAGE else APPROACHES
+    if format == Format.SINGLE_IMAGE:
+        if single_image_style == "quote":
+            allowed_approaches = SINGLE_IMAGE_QUOTE_APPROACHES
+        elif single_image_style == "stat":
+            allowed_approaches = SINGLE_IMAGE_STAT_APPROACHES
+        else:
+            allowed_approaches = SINGLE_IMAGE_SAFE_APPROACHES
+    else:
+        allowed_approaches = APPROACHES
 
     candidates = [
         (sub, Approach(a), EntryPoint(e))
@@ -101,9 +123,12 @@ def generate_angle(
     llm: LLMProvider,
     *,
     format: Format | None = None,
+    single_image_style: SingleImageStyle | None = None,
     rng: random.Random | None = None,
 ) -> SampledAngle:
-    sub_concept, approach, entry_point = sample_cell(topic, memory, format=format, rng=rng)
+    sub_concept, approach, entry_point = sample_cell(
+        topic, memory, format=format, single_image_style=single_image_style, rng=rng
+    )
 
     system = (
         "You write specific, concrete content angles for a single Instagram post — "

@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
-from app.engine.angle_engine import SampledAngle, generate_angle
+from app.engine.angle_engine import SampledAngle, SingleImageStyle, generate_angle
 from app.engine.brief_builder import build_brief
 from app.engine.generator import generate_post, regenerate_slide, slide_text
 from app.engine.memory import MemoryStore
@@ -49,6 +49,10 @@ router = APIRouter()
 class ProposeRequest(BaseModel):
     topic_id: str
     format: Format
+    # "Poetic Quote" / "Quick Stat" (logbook #28) — ignored unless format is
+    # single_image; leaving it unset samples from the full 4-approach safe pool,
+    # same as before this field existed.
+    single_image_style: SingleImageStyle | None = None
 
 
 class ProposeResponse(BaseModel):
@@ -74,6 +78,9 @@ class GenerateRequest(BaseModel):
     mood: str | None = None
     visual_subject: str | None = None
     fingerprint: str | None = None
+    # Only takes effect when the above five are unset (a fresh sample, not a preselected
+    # replay) and format is single_image — see ProposeRequest.single_image_style.
+    single_image_style: SingleImageStyle | None = None
 
 
 class GenerateFromBriefRequest(BaseModel):
@@ -197,6 +204,7 @@ async def run_generate(
     settings: Settings,
     rng: random.Random | None = None,
     preselected: SampledAngle | None = None,
+    single_image_style: SingleImageStyle | None = None,
 ) -> GenerateResponse:
     topic = topics_by_id.get(topic_id)
     if topic is None:
@@ -204,7 +212,9 @@ async def run_generate(
 
     memory = store.load()
     sampled = (
-        preselected if preselected is not None else generate_angle(topic, memory, llm, format=format, rng=rng)
+        preselected
+        if preselected is not None
+        else generate_angle(topic, memory, llm, format=format, single_image_style=single_image_style, rng=rng)
     )
 
     brief_result = build_brief(
@@ -245,7 +255,14 @@ async def propose(request: ProposeRequest) -> ProposeResponse:
         raise HTTPException(status_code=404, detail=f"Unknown topic_id: {request.topic_id!r}")
 
     memory = MemoryStore().load()
-    sampled = await asyncio.to_thread(generate_angle, topic, memory, LLMProvider(), format=request.format)
+    sampled = await asyncio.to_thread(
+        generate_angle,
+        topic,
+        memory,
+        LLMProvider(),
+        format=request.format,
+        single_image_style=request.single_image_style,
+    )
     return ProposeResponse(
         topic_id=topic.id,
         topic_name=topic.name,
@@ -291,6 +308,7 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
             image=ImageProvider(),
             settings=get_settings(),
             preselected=preselected,
+            single_image_style=request.single_image_style,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

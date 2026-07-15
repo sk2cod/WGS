@@ -9,6 +9,9 @@ import type {
 } from "./types";
 
 export type ApiFormat = "carousel" | "single_image";
+// "Poetic Quote" -> single_quote template, "Quick Stat" -> single_stat template
+// (logbook #28) — ignored server-side unless ApiFormat is "single_image".
+export type SingleImageStyle = "quote" | "stat";
 export type Approach =
   | "educational"
   | "myth_vs_fact"

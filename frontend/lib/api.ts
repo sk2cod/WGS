@@ -8,6 +8,7 @@ import type {
   GenerateResponse,
   PasteLinkBriefResult,
   ProposeResponse,
+  SingleImageStyle,
   Topic,
 } from "./api-types";
 import type { Mood } from "./types";
@@ -60,10 +61,14 @@ export function pasteLink(url: string, format: ApiFormat = "carousel"): Promise<
   });
 }
 
-export function proposeApproach(topicId: string, format: ApiFormat): Promise<ProposeResponse> {
+export function proposeApproach(
+  topicId: string,
+  format: ApiFormat,
+  singleImageStyle?: SingleImageStyle,
+): Promise<ProposeResponse> {
   return request<ProposeResponse>("/generate/propose", {
     method: "POST",
-    body: JSON.stringify({ topic_id: topicId, format }),
+    body: JSON.stringify({ topic_id: topicId, format, single_image_style: singleImageStyle ?? null }),
   });
 }
 
@@ -79,10 +84,16 @@ export function generatePost(
   topicId: string,
   format: ApiFormat,
   accepted?: AcceptedProposal,
+  singleImageStyle?: SingleImageStyle,
 ): Promise<GenerateResponse> {
   return request<GenerateResponse>("/generate", {
     method: "POST",
-    body: JSON.stringify({ topic_id: topicId, format, ...accepted }),
+    body: JSON.stringify({
+      topic_id: topicId,
+      format,
+      single_image_style: singleImageStyle ?? null,
+      ...accepted,
+    }),
   });
 }
 

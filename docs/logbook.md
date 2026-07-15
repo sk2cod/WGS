@@ -1054,6 +1054,123 @@ calls, before it's considered verified.
 
 ---
 
+## 28. Single Image style choice: "Poetic Quote" / "Quick Stat" — additive, on top of #26's approach-pool fix
+
+**What this adds:** #26 fixed `single_image` crashing on structurally
+incompatible approaches by constraining the sampler to a 4-approach safe
+pool (`common_mistakes`, `stat_research`, `story`, `question_reflection`)
+when format is `single_image` — but which of those 4 gets sampled was
+still random, meaning she couldn't reliably choose "a quote-style post" vs.
+"a stat-style post" up front. This gives her that choice directly, on top
+of #26's fix rather than instead of it:
+
+- `taxonomy/approaches.py`: split `SINGLE_IMAGE_SAFE_APPROACHES` into
+  `SINGLE_IMAGE_QUOTE_APPROACHES` (`story`, `question_reflection` — the
+  poetic-register half, `single_quote` template) and
+  `SINGLE_IMAGE_STAT_APPROACHES` (`common_mistakes`, `stat_research` — the
+  direct-register half, `single_stat` template). `SINGLE_IMAGE_SAFE_APPROACHES`
+  itself is now defined as their union and kept fully intact for every
+  existing no-style-given caller.
+- `angle_engine.py`: `sample_cell()`/`generate_angle()` gain an optional
+  `single_image_style: Literal["quote", "stat"] | None` parameter. When
+  `format == single_image` and a style is given, the pool narrows to just
+  that half; when format is `single_image` and no style is given, behavior
+  is unchanged from #26 (samples the full 4-approach safe pool); when
+  format isn't `single_image`, the parameter has no effect at all (full 8
+  approaches, exactly as before this change).
+- `routes/generate.py`: `ProposeRequest` and `GenerateRequest` both gain
+  `single_image_style: Literal["quote", "stat"] | None = None`. Both
+  `propose()` and `run_generate()` thread it through to `generate_angle()`
+  — `propose()` matters as much as `run_generate()` for the same reason
+  #26 called out: it's what populates the `preselected` angle a real
+  client later replays into `/generate`, so the style choice has to hold
+  at the point she actually picks it, not just at final generation.
+- Frontend (`app/generate/page.tsx`): when Single Image is the selected
+  format, a second row of two buttons appears — "Poetic Quote" / "Quick
+  Stat" — reusing the existing `primaryButtonStyle`/`secondaryButtonStyle`
+  toggle pattern already used for the Carousel/Single Image choice
+  directly above it. Defaults to "Poetic Quote" selected. The choice is
+  wired into both the `/generate/propose` and `/generate` request bodies
+  (`lib/api.ts`, `lib/api-types.ts`); Carousel format shows no such choice
+  and never sends the field a non-null value.
+
+**Verified:**
+- 6 real, unforced `/generate` calls on `single_image` + `style=quote`
+  across different topics — 100% produced `single_quote` slides, approach
+  always `story` or `question_reflection`, 0 crashes (one transient
+  strong-tier JSON-parse hiccup on one call, the pre-existing intermittent
+  class from logbook #7 — succeeded cleanly on retry, unrelated to this
+  change).
+- 6 real, unforced `/generate` calls on `single_image` + `style=stat` —
+  100% produced `single_stat` slides, approach always `common_mistakes` or
+  `stat_research`, 0 crashes (two unrelated minor validator findings — a
+  word-count overage, a forbidden-phrase hit — normal validator behavior,
+  not a citation/grounding or shape problem).
+- Deterministic pool-membership checks (no LLM calls): 500 trials with no
+  style given still reach exactly the same 4-approach pool as #26; 200
+  trials each with `style=quote`/`style=stat` never leave their respective
+  2-approach half.
+- HTTP-level check via `TestClient` against the real `/generate/propose`
+  route: a request with the `single_image_style` field omitted entirely
+  (simulating an old/cached frontend build) returns `200` and samples from
+  the full safe pool, exactly as before this field existed — confirms the
+  change is additive, not breaking, for any client that hasn't picked up
+  the new frontend yet.
+- Carousel: 300 trials each with `single_image_style` set to `None`,
+  `"quote"`, and `"stat"` all reached the identical full 8-approach set —
+  confirms the field is inert outside `single_image`, regardless of value.
+- `pnpm exec tsc --noEmit`: clean.
+- Full backend suite: **111/111 passing**.
+
+**Not a blueprint deviation** — additive new scope built directly on
+#26's already-fixed approach-pool constraint (narrowing an existing safe
+pool further by explicit choice, not reintroducing anything #26 excluded
+for structural reasons), not a departure from anything locked in
+`blueprint.md`/`implementation-guide.md`.
+
+**Follow-up, investigated on direct request: which call hit the transient
+JSON-parse failure seen during this entry's live testing, and does it
+close #13's open question?** Re-ran 20 additional live `single_image`
+`/generate` calls (10 `quote`, 10 `stat`, across 10 different topics) with
+full traceback capture, not just the exception type name. **5 of 20
+failed** — a real, measurable rate, higher than the single incidental
+hiccup in the main testing above suggested. All 5 traces are identical in
+shape: `generate_post` → `refine_post` → `_parse_post` — **never**
+`draft_post`, **never** `critique_post`. Since `refine_post` only runs
+after `critique_post` returns successfully, all 5 cases are also positive
+evidence `critique_post` completed cleanly every time this session
+(partial progress on #13's "only `draft_post` was directly repro-tested"
+gap — `critique_post` now has real, if indirect, live coverage).
+
+**But this is not a clean confirmation that "the #7 fix also covers
+`refine_post`"**, and it would be inaccurate to log it that way. #7's
+original signature was an *empty* response — extended thinking consuming
+the entire token budget, `stop_reason: max_tokens`, a `thinking` content
+block only, no text at all. None of these 5 failures look like that. Two
+were literal JSON syntax errors on substantial, real content (`Extra
+data: line 1 column 356` — a complete JSON object followed by trailing
+data; `Invalid control character at: line 1 column 401` — an unescaped
+raw character inside a string). The other three were `refine_post`
+returning 5–8 slide objects for a brief whose `slide_count` is 1 — the
+same "too many items" symptom #26 fixed at the sampling layer, except
+here the *approach* was already a confirmed-safe one (`story`,
+`question_reflection`, `common_mistakes`) and `draft_post` had already
+returned the correct single slide for the exact same brief moments
+earlier — `refine_post`'s own rewrite is where it drifted. Both failure
+shapes involve substantial, real content, not an empty response, so they
+don't carry #7's specific fingerprint one way or the other without
+inspecting the raw `stop_reason` (not captured here).
+
+**Net finding:** `critique_post` gets real supporting evidence of
+reliability from this session's volume; `refine_post` does not — it has
+its own, separate, still-open reliability gap (occasional malformed JSON
+syntax, or disregarding the 1-slide constraint independently of approach
+safety), observed at roughly 1-in-4 in this sample. Worth a dedicated
+look given that rate, but out of scope for #28 itself — not chased
+further here.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |

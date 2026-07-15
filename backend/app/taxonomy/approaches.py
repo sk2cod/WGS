@@ -25,9 +25,18 @@ TEACHING_BODY_APPROACHES: set[str] = {
 # four below never failed across repeated live trials — restricting single_image's
 # sampled approach pool to just these avoids the mismatch at the source (the sampler),
 # instead of leaving it to be caught — or not — after a wasted generation call.
-SINGLE_IMAGE_SAFE_APPROACHES: set[str] = {
-    Approach.COMMON_MISTAKES.value,
-    Approach.STAT_RESEARCH.value,
+#
+# Split by which single_image template each half resolves to (APPROACH_REGISTER's
+# poetic/direct split — see taxonomy/voice_register.py), so a caller can ask for one
+# specific style ("Poetic Quote" / "Quick Stat") instead of a random one of the 4 —
+# see logbook #28. SINGLE_IMAGE_SAFE_APPROACHES stays the union, unchanged, for the
+# existing no-style-given callers.
+SINGLE_IMAGE_QUOTE_APPROACHES: set[str] = {
     Approach.STORY.value,
     Approach.QUESTION_REFLECTION.value,
 }
+SINGLE_IMAGE_STAT_APPROACHES: set[str] = {
+    Approach.COMMON_MISTAKES.value,
+    Approach.STAT_RESEARCH.value,
+}
+SINGLE_IMAGE_SAFE_APPROACHES: set[str] = SINGLE_IMAGE_QUOTE_APPROACHES | SINGLE_IMAGE_STAT_APPROACHES
