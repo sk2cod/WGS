@@ -842,6 +842,47 @@ storage ceiling.
 
 ---
 
+## 25. Browse screen rebuilt: category-first (strict `primary_category`) replaces the flat multi-tag list — deliberate deviation from blueprint.md Section 5
+
+**What changed:** `frontend/app/page.tsx`'s "Browse all topics ▼" flat list (every
+topic in one scrollable list, single toggle) was replaced with a two-step flow:
+a fixed grid of exactly 7 category tiles (`Mindset`, `Career`, `Wellness`,
+`Women's Health`, `Relationships`, `Society`, `Inspiring Women` — hardcoded in
+`page.tsx`, not derived from `topics.yaml`), and tapping one reveals only the
+topics whose `Topic.primary_category` exactly matches that tile. There is no
+flat/unfiltered browse view anymore — the category tiles are the only entry
+point. Filtering uses `topic.primary_category === selectedCategory` only;
+`topic.categories` (the multi-tag list) is not read by this screen at all.
+Everything downstream of tapping a topic (`goToGenerate(topic.id)`, the
+`/generate` route, `brief_builder.py`, masthead computation) is unchanged —
+confirmed via `git diff --stat`, which shows only `frontend/app/page.tsx`
+touched.
+
+**Why — deliberate deviation from blueprint.md Section 5:** the blueprint's
+original browse design has a topic show up under every one of its `categories`
+tags (a multi-tag display — "every benefit of a graph, no graph infra"). After
+review, strict `primary_category`-only browsing was chosen instead: the
+masthead already counts and labels every post against exactly one category
+(`Topic.primary_category`, Section 11/12), so a browse screen that could show
+the same topic under multiple tiles would let her find and generate a topic
+from a category tile that doesn't match what the resulting post's masthead
+will actually say — e.g. finding "Setting Boundaries Without Guilt" under a
+`Relationships` tile (it's tagged `["Mindset", "Relationships"]`) but getting a
+`WGS — MINDSET NO. n` masthead on the generated post. Strict primary-category
+browsing keeps the category she browsed under and the category the post is
+labeled with always consistent. `Topic.categories` is kept as-is in the
+Pydantic model/YAML (not removed) — only this screen's logic ignores it.
+
+**Verified manually** (not phase-gated — this isn't one of the six original
+phases): `pnpm exec tsc --noEmit` clean; grepped `primary_category` values
+across all 18 current `topics.yaml` entries — distribution is Mindset 3,
+Career 3, Wellness 3, Women's Health 3, Relationships 3, Society 2, Inspiring
+Women 1 (sums to 18), and every value exactly matches one of the 7 hardcoded
+tile labels, so every topic appears under exactly one tile and none are
+orphaned.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -852,3 +893,4 @@ storage ceiling.
 | 9 | Memory/brand kit actually wired to Supabase (not just schema+client existing) | Explicit follow-up request; Phase 6 as literally written stopped short of this |
 | 11 | `IMAGE_QUALITY=low` instead of the doc's starting `medium` | The guide's own planned experiment, now run and confirmed |
 | 12 | Frontend builds with `--webpack`, not Next 16's default Turbopack | Turbopack silently drops a file `@vercel/og` needs at runtime on Vercel; webpack doesn't |
+| 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |

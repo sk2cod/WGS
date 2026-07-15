@@ -18,13 +18,26 @@ import {
   secondaryButtonStyle,
 } from "@/lib/ui-styles";
 
+// Fixed, hardcoded category list — these 7 are definitional to the product
+// (blueprint.md Section 0), not derived from topics.yaml. Do not compute this
+// from data.
+const CATEGORIES = [
+  "Mindset",
+  "Career",
+  "Wellness",
+  "Women's Health",
+  "Relationships",
+  "Society",
+  "Inspiring Women",
+] as const;
+
 export default function Home() {
   const router = useRouter();
   const [picks, setPicks] = useState<DailyPicksResult | null>(null);
   const [picksError, setPicksError] = useState<string | null>(null);
   const [rerollingIndex, setRerollingIndex] = useState<number | null>(null);
 
-  const [browsing, setBrowsing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [topics, setTopics] = useState<Topic[] | null>(null);
 
   const [pasteUrl, setPasteUrl] = useState("");
@@ -49,8 +62,8 @@ export default function Home() {
     }
   }
 
-  async function handleBrowseToggle() {
-    setBrowsing((prev) => !prev);
+  async function handleSelectCategory(category: string) {
+    setSelectedCategory(category);
     if (!topics) {
       try {
         setTopics(await getTopics());
@@ -125,27 +138,60 @@ export default function Home() {
       )}
 
       <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <button style={ghostButtonStyle} onClick={handleBrowseToggle}>
-          {browsing ? "Hide full topic list ▲" : "Browse all topics ▼"}
-        </button>
-        {browsing && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {!topics && <p style={{ opacity: 0.6 }}>Loading topics…</p>}
-            {topics?.map((topic) => (
+        <div style={labelStyle}>Browse by category</div>
+
+        {!selectedCategory && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            {CATEGORIES.map((category) => (
               <button
-                key={topic.id}
-                onClick={() => goToGenerate(topic.id)}
+                key={category}
+                onClick={() => handleSelectCategory(category)}
                 style={{
                   ...cardStyle,
-                  padding: "12px 16px",
-                  textAlign: "left",
+                  padding: "16px 12px",
+                  textAlign: "center",
+                  alignItems: "center",
                   cursor: "pointer",
+                  fontWeight: 600,
                 }}
               >
-                <span style={{ fontWeight: 600 }}>{topic.name}</span>
-                <span style={{ fontSize: 13, opacity: 0.6 }}>{topic.primary_category}</span>
+                {category}
               </button>
             ))}
+          </div>
+        )}
+
+        {selectedCategory && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <button style={ghostButtonStyle} onClick={() => setSelectedCategory(null)}>
+              ← All categories
+            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {!topics && <p style={{ opacity: 0.6 }}>Loading topics…</p>}
+              {topics
+                ?.filter((topic) => topic.primary_category === selectedCategory)
+                .map((topic) => (
+                  <button
+                    key={topic.id}
+                    onClick={() => goToGenerate(topic.id)}
+                    style={{
+                      ...cardStyle,
+                      padding: "12px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{topic.name}</span>
+                    <span style={{ fontSize: 13, opacity: 0.6 }}>{topic.primary_category}</span>
+                  </button>
+                ))}
+            </div>
           </div>
         )}
       </section>
