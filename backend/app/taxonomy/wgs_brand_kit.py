@@ -1,5 +1,9 @@
+import logging
+
 from app.db import supabase as db
 from app.models.brand_kit import BrandKit
+
+logger = logging.getLogger(__name__)
 
 # Locked WGS values — Section 6 of implementation-guide.md / Section 4 of the blueprint.
 # Mirrors frontend/lib/wgs-brand-kit.ts. Also doubles as the seed row: get_brand_kit()
@@ -72,5 +76,10 @@ def get_brand_kit() -> BrandKit:
     existing = db.fetch_brand_kit()
     if existing is not None:
         return existing
+    logger.warning(
+        "brand_kit table was empty on read — seeding from the WGS_BRAND_KIT constant. "
+        "Expected once on a fresh database; if this fires on an already-provisioned "
+        "project, the row was deleted (or something is wrong with this emptiness check)."
+    )
     db.upsert_brand_kit(WGS_BRAND_KIT)
     return WGS_BRAND_KIT

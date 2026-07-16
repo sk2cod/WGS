@@ -59,23 +59,101 @@ values ('heroes', 'heroes', true)
 on conflict (id) do nothing;
 
 -- Row Level Security: the backend talks to these tables via the service_role key,
--- which bypasses RLS entirely, so this only locks down the anon/authenticated keys
--- that ship in the frontend bundle. Single creator, one auth user -> any authenticated
--- session gets full access; anon (logged-out) gets none.
+-- which bypasses RLS entirely (a role property, unaffected by anything below), so
+-- this only ever governed the anon/authenticated keys that ship in the frontend
+-- bundle. Originally: any authenticated session got full read/write access, anon got
+-- none. Tightened (logbook #34) after an investigation (#30, #33) found the
+-- "authenticated_full_access" policy below was FOR ALL / using(true) / with
+-- check(true) -- fully open -- and a production brand_kit value changed with no
+-- identified writer in application code. Frontend/backend code review (Step 1 of
+-- #34) confirmed nothing legitimate needs direct authenticated access to any of
+-- these three tables -- the frontend Supabase client is auth-only (no `.from(...)`
+-- calls at all), and every backend read/write goes through db/supabase.py's single
+-- service_role-keyed client. So authenticated is now locked out entirely, same as
+-- anon already was.
 alter table brand_kit enable row level security;
 alter table memory enable row level security;
 alter table image_cache enable row level security;
 
-grant select, insert, update, delete on brand_kit, memory, image_cache to authenticated;
+revoke select, insert, update, delete on brand_kit, memory, image_cache from authenticated;
 
 drop policy if exists "authenticated_full_access" on brand_kit;
-create policy "authenticated_full_access" on brand_kit
-    for all to authenticated using (true) with check (true);
-
 drop policy if exists "authenticated_full_access" on memory;
-create policy "authenticated_full_access" on memory
-    for all to authenticated using (true) with check (true);
-
 drop policy if exists "authenticated_full_access" on image_cache;
-create policy "authenticated_full_access" on image_cache
-    for all to authenticated using (true) with check (true);
+
+-- No replacement policies: RLS stays enabled with zero policies for either anon or
+-- authenticated, so both get 0 rows on read and every write rejected at the object-
+-- permission layer (confirmed live: 403 `permission denied`, before RLS is even
+-- evaluated). service_role is unaffected, per the note above.
+
+-- Audit trail (logbook #34): records every insert/update/delete on brand_kit and
+-- memory, through any path (app, dashboard, direct API/SQL) -- independent of the
+-- RLS tightening above, so a future out-of-band write is visible even if some other
+-- access path is ever opened back up by mistake. Append-only in practice: locked
+-- down the same way as the three tables above -- both RLS (enabled, no policies for
+-- anon/authenticated) AND an explicit revoke of the base grants Supabase applies by
+-- default to new public-schema tables (confirmed live: without the revoke below,
+-- authenticated could still SELECT and get 200/[] rather than a 403 -- RLS alone
+-- filtered every row but didn't deny the query itself; the revoke closes that gap
+-- the same way the other three tables are already closed). Only the security-
+-- definer trigger function below (which runs as its owner, exempt from RLS as
+-- owner) can write into it.
+create table if not exists audit_log (
+    id bigint generated always as identity primary key,
+    table_name text not null,
+    operation text not null,
+    row_id text,
+    old_value jsonb,
+    new_value jsonb,
+    changed_at timestamptz not null default now(),
+    db_user text not null default current_user,
+    auth_role text default auth.role(),
+    auth_uid uuid default auth.uid()
+);
+
+alter table audit_log enable row level security;
+
+revoke select, insert, update, delete on audit_log from authenticated, anon;
+
+create or replace function audit_row_change() returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_row_id text;
+begin
+    if tg_op = 'DELETE' then
+        v_row_id := (row_to_json(old)->>'id');
+    else
+        v_row_id := (row_to_json(new)->>'id');
+    end if;
+
+    insert into audit_log (table_name, operation, row_id, old_value, new_value, db_user, auth_role, auth_uid)
+    values (
+        tg_table_name,
+        tg_op,
+        v_row_id,
+        case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) else null end,
+        case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) else null end,
+        current_user,
+        auth.role(),
+        auth.uid()
+    );
+
+    if tg_op = 'DELETE' then
+        return old;
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists audit_brand_kit on brand_kit;
+create trigger audit_brand_kit
+    after insert or update or delete on brand_kit
+    for each row execute function audit_row_change();
+
+drop trigger if exists audit_memory on memory;
+create trigger audit_memory
+    after insert or update or delete on memory
+    for each row execute function audit_row_change();

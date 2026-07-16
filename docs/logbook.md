@@ -1533,6 +1533,123 @@ unused-but-still-passed `category`/`number` fields on `MastheadInfo`.
 
 ---
 
+## 33. Investigation-only follow-up to #31: no export event exists at all, a second dormant bug found (masthead counter always "01"), and the cache-invalidation premise in #31's own framing was wrong
+
+**Status: read-only investigation, explicitly requested as such — no code touched, nothing
+committed.** Scoped to answer five specific questions about #31 (the voice-compounding
+mechanism never persisting) before any implementation is attempted. Everything below is
+traced against the actual repo and two live, read-only checks (a Supabase `select` query
+against `brand_kit`/`memory`, and the Anthropic `count_tokens` endpoint) — no `/generate`
+call, no write of any kind.
+
+**1. Where export confirmation lives — it doesn't; there is no export-confirmation event
+at all.** Every `MemoryRecord` is created with `status="draft"` hardcoded
+(`routes/generate.py:188-201`); grepping the whole backend for `status="exported"` outside
+test files returns nothing. There is no `routes/export.py` or `routes/brand.py` — only
+`topics.py`, `picks.py`, `sources.py`, `generate.py` exist. `frontend/app/export/page.tsx`'s
+`handleDone()` only clears `sessionStorage` and navigates home — zero network calls. The
+editor's inline text edits (`updateSlide()`) only mutate local React state; the only two
+backend calls from the editor are regenerate-slide and reshuffle-image, both generation
+calls, not saves. **#31's own framing — "which event should trigger the append, export
+confirmation or a swipe-edit save?" — assumes two events that don't exist as
+backend-observable events today.** Either has to be built from scratch.
+
+**A second, previously unflagged bug surfaced by the same trace:** since `status` never
+becomes `"exported"`, `next_masthead_number()` (`models/memory.py:24`,
+`1 + sum(... and r.status == "exported")`) has been computing `1 + 0` for every category on
+every call since Phase 6. **Every post's masthead number has always been "01."** This is
+independent of #32 (which only stopped *displaying* the number) — the backend value itself
+has been wrong the whole time. Not fixed here — logged so it isn't rediscovered as a
+mystery later.
+
+**2. Persistence pattern — `MemoryStore`/`PicksStore` are real; `BrandKitStore` is
+unnecessary scope.** `MemoryStore` (`engine/memory.py`) is a real dual-backend class
+(Supabase when constructed with no path, file-backed for tests). `PicksStore`
+(`engine/selector.py`) is real but unconditionally file-backed — no Supabase branch, unlike
+`MemoryStore` (noted, not chased further). No `BrandKitStore` class exists anywhere;
+`db.upsert_brand_kit(kit)` (`db/supabase.py:54`) already does the full write in one call, so
+a wrapper class isn't required to close #31 — only worth adding if file-backed test
+hermeticity matching `MemoryStore`'s pattern is wanted.
+
+**3. Live `voice_samples` — still 5+5 (confirms #31's core finding still holds), but the
+content has moved since #31 was written.** Queried the live `brand_kit` row directly: both
+arrays are still exactly 5 entries, so no compounding has happened. But `direct` no longer
+matches the original workplace-themed seed #31 quoted — it now matches the #30 revision,
+meaning someone/something already upserted the new value to production, even though #30's
+own text describes the production row as "deliberately NOT touched," left as an explicit
+open follow-up. Flagged as a discrepancy for whoever owns that decision — not resolved
+here. Measured sizes via `count_tokens` (`claude-sonnet-5`): poetic block 427 chars / 147
+tokens, direct block 635 chars / 207 tokens.
+
+**4. Token/cost impact of growth — real numbers, and the cache-invalidation question in
+#31's own notes turned out to be based on a wrong premise.** The injection point is
+`generator.py:264`/`:304` inside `_brief_system_prompt()`; `brief.brand_voice_samples` is
+**one resolved register only** — a single `/generate` call injects 5 lines today, not 10.
+`providers/llm.py`'s `cache_control` wraps the *entire* system string as one block, and that
+string is brief-specific (topic/angle/approach/tone all baked in) — so the cache already
+invalidates on **every single post, unconditionally**, regardless of `voice_samples` size or
+export cadence. There is no export-frequency-driven invalidation rate to compute, because
+nothing is currently shared *across* posts at all; the only real caching that happens is
+within one post's 3 sequential calls (draft/critique/refine build byte-identical system
+strings, so calls 2-3 read the cache call 1 wrote). Real cost curve at Sonnet 5 pricing
+(measured 35.4 tok/line average): growing to 10/20/30/50 lines per register costs an
+incremental **$0.0008 / $0.0023 / $0.0039 / $0.0069 per post** — under a cent even at 10x
+growth. The real constraint on any cap is prompt quality (diluting/contradicting few-shot
+examples), not token spend.
+
+**5. Extraction logic — blocked on a bigger gap: no full post content is persisted
+anywhere, ever.** `MemoryRecord.hook` is `slide_text(post.slides[0])[:80]` — first slide
+only, truncated to 80 characters. The caption is never stored. The full `GeneratedPost`
+exists only in the HTTP response to the frontend and client-side session state after that —
+nothing durable server-side. **Any extraction strategy has to run inline during
+generation/export, not as a later job reading `memory`**, since `memory` never had the
+content to begin with. Illustrated three candidate strategies (first-standout-slide-line,
+caption-hook, LLM-picked-best-line) against two real (truncated) production hooks pulled
+live — first-standout-line is free (arguably already computed as `hook`, just cut short for
+a different purpose); caption-hook needs a new persisted field; LLM-picked-best-line needs
+either a new call or piggybacking onto `critique_post`'s existing response, the same trick
+already used for mood-tagging in #4.
+
+**Not a blueprint deviation** — pure investigation, no code or config changed. Carries
+forward #31's OPEN status with a corrected, more specific problem statement: the export
+event needs to be invented (not hooked), a masthead-counter bug needs a separate fix, and
+extraction has to be wired into the live generation path rather than read back from
+`memory`.
+
+---
+
+## 34. `brand_kit`'s RLS policy was wide open to any authenticated session — root cause of #30/#33's untraceable production discrepancy; tightened, plus a database-level audit trail
+
+**Symptom, traced across several read-only turns before anything was changed:** #30 rewrote `voice_samples.direct` in code but explicitly said the live Supabase `brand_kit` row was "deliberately NOT touched." #33's investigation found the live row already matched the new value anyway, with no caller of `upsert_brand_kit()` anywhere in the app to explain it (`get_brand_kit()`'s self-seed branch only fires when the table is empty, and the table was never empty across this window). A dedicated investigation across the next several turns ruled out every code-level explanation one at a time:
+
+- **Deploy/commit state** — confirmed via `git log`, `railway status --json` (exact `commitHash` match), and `vercel inspect`/alias timing that #30 (`7f3474c`) and #32 (`65166fa`) were both committed, pushed, and deployed correctly — not an artifact of an un-pushed or partially-deployed change.
+- **The seeding mechanism itself** — read `get_brand_kit()`/`fetch_brand_kit()`/`upsert_brand_kit()` directly: the "should I seed" check is a real row-existence check (`if not res.data: return None`), not a fragile key/None check; `get_brand_kit()` runs per-request (no caching), but harmlessly, since the check only ever fires the seed branch on a genuinely empty table; `upsert_brand_kit()` has exactly one call site in the entire repo (grepped, no scripts/tools directory exists); neither file's logic has changed since it was first written in `7d898fd` (confirmed via `git log --follow`); and Railway showed **zero backend restarts** since #30 deployed (one deployment, one instance, one `Application startup complete` line in the logs) — so there was no restart-triggered reseed window for this to have happened in even if the check had been fragile, which it wasn't.
+- **Frontend as a bypass path** — grepped all of `frontend/` for `.from("brand_kit")` / `.from("memory")` / `.from("image_cache")`: zero matches across all three tables. The frontend's only Supabase client (anon-keyed) is used exclusively for `.auth.*` calls (session, sign-in, sign-out) in 3 files — it never touches any table.
+- **RLS policy, queried live** (no `psql`/pg driver was available locally, so this used an ephemeral `uv run --with psycopg2-binary` against `SUPABASE_DB_URL` — nothing added to the project's tracked dependencies): `brand_kit` had RLS enabled with exactly one policy, `authenticated_full_access` — `FOR ALL TO authenticated USING (true) WITH CHECK (true)`. **Fully open read and write access to any session holding a valid `authenticated` JWT** — not select-only, and matching `schema.sql` exactly (no drift between repo and deployed state). This is the actual explanation: nothing in application code wrote the new value: the RLS design itself always permitted a direct out-of-band write (Supabase dashboard Table Editor, or a manual REST call with a valid authenticated session) to freely rewrite `brand_kit`, completely independent of any app code path.
+- **Server-side logs** — checked whether Supabase's own Postgres/API/Auth logs could show *who* made the change. No access path exists from this environment (no Management API personal access token, no `supabase` CLI installed) to query them, and the project is documented as Supabase Free tier, whose log retention is short enough that the July 13-15 window has very likely already rolled off even with access. Reported plainly as "cannot reach, not "no evidence found"" — this was never confirmed one way or the other, and won't be.
+
+**Root cause:** `brand_kit` (and, by the same design pattern, `memory` and `image_cache`) granted full CRUD to any `authenticated` session with no row-level restriction, for a single-creator app with exactly one real auth user. Nothing needed exploiting — the RLS policy itself was the gap. The *who/when* of the specific July 2026 change remains genuinely unknown (logs unreachable) and is not going to be resolved further; the fix closes the mechanism regardless of attribution.
+
+**Fix, applied directly against production Supabase (`SUPABASE_DB_URL`, service-equivalent `postgres` role) after a design review and explicit go-ahead — SQL shown and approved before it ran:**
+
+- `revoke select, insert, update, delete on brand_kit, memory, image_cache from authenticated;` and dropped all three `authenticated_full_access` policies. No replacement policies were added — RLS stays enabled with zero policies for either `anon` or `authenticated`, so both are now locked out of direct reads and writes on all three tables at the object-permission layer (confirmed live, see Verified). `anon` was already effectively locked out before this (no matching policy existed for it); this change doesn't touch `anon`'s config, only makes the lockout explicit at the grant level too, matching how it already behaved.
+- Added a new `audit_log` table (`table_name`, `operation`, `row_id`, `old_value`/`new_value` as `jsonb`, `changed_at`, `db_user` = `current_user`, `auth_role` = `auth.role()`, `auth_uid` = `auth.uid()`) plus a `security definer` trigger function (`audit_row_change()`) and `AFTER INSERT OR UPDATE OR DELETE` triggers on `brand_kit` and `memory` (not `image_cache` — deliberately scoped this way, matching the design that was reviewed and approved; `image_cache` got the RLS tightening but not an audit trigger). The trigger function's `security definer` is what lets it record a write successfully even from a role that otherwise has no privileges on `audit_log` itself.
+- **Found during pre-commit review, fixed in the same arc before anything landed:** `audit_log` was initially described above as "locked down the same way" as the other three tables, but it wasn't — it only had `alter table audit_log enable row level security;` with zero policies, and never got an explicit `revoke`. Re-testing it with the same throwaway-user method (see Verified #1) showed `SELECT` as `authenticated` returned **`200` with an empty array**, not a `403` — Supabase's default schema-level privileges still granted `authenticated`/`anon` base `SELECT` on this brand-new `public`-schema table, so the query was *permitted* at the grant layer and only then filtered to zero rows by RLS (no policy to satisfy). No data was ever actually exposed (empty result either way), but it wasn't the same denial mechanism as the other three tables, and it was inconsistent with them. Fixed with `revoke select, insert, update, delete on audit_log from authenticated, anon;` — matching the explicit-revoke pattern already used on `brand_kit`/`memory`/`image_cache`, rather than relying on RLS-with-zero-policies alone. `schema.sql` updated to include this line and an explanatory comment.
+- Added a `logger.warning(...)` line in `get_brand_kit()`'s seed-on-empty branch (`taxonomy/wgs_brand_kit.py`) so a reseed event is visible immediately in Railway's live logs, not only queryable later via `audit_log`. This is the first `logging` usage anywhere in this backend (grepped — none existed before); uses a plain stdlib `logger = logging.getLogger(__name__)`, no new configuration needed since uvicorn's existing setup already surfaces it.
+- `backend/app/db/schema.sql` updated to match exactly what was applied live, so the repo stays the source of truth.
+
+**Verified, in this order, against live production:**
+1. **`authenticated` is genuinely locked out — on all four tables, not just three.** Created a throwaway Supabase Auth test user via the admin API (service_role), signed in as it to get a real `authenticated` JWT (same pattern as #8's own RLS verification), and attempted `SELECT` on `brand_kit`/`memory`/`image_cache` plus `INSERT`/`UPDATE` on `brand_kit`: all 5 returned `403` / `permission denied for table ...` (Postgres code `42501`). `audit_log` initially did not (see the pre-commit-review fix above) — re-ran the identical test against `audit_log` alone after applying its own `revoke`, and it now returns the same `403 permission denied for table audit_log` on `SELECT`, matching the other three exactly; `INSERT` on `audit_log` was already correctly rejected before this fix, by RLS's `WITH CHECK` rather than the grant layer. Test users deleted immediately after each run.
+2. **Backend unaffected** — `GET /topics` on the live Railway URL: `200`. A real `POST /generate` (single_image/stat, topic `mindset-self-doubt`) against production: `200` in 27.6s, `validation_errors: []`, correct single-slide output — service_role continues to bypass RLS exactly as designed, confirming the tightening didn't touch the app's own access path.
+3. **Audit trail captures real writes correctly** — the `/generate` call above wrote a real `memory` row; `audit_log` captured it (`operation: INSERT`, `auth_role: service_role`, correct `row_id`). Separately, ran one harmless, reversible-in-spirit test write directly against `brand_kit` (`update brand_kit set updated_at = now()` — touches no actual brand content) to exercise the `UPDATE` path without needing to risk the seed-on-empty branch against a table that already holds real data: `audit_log` captured `old_value`/`new_value` correctly (only `updated_at` differed; `voice_samples_direct` confirmed byte-identical old vs. new), with `db_user: postgres`, `auth_role: NULL` (correctly `NULL` since this was a direct Postgres connection, not a PostgREST-proxied request with a JWT — `auth.role()`/`auth.uid()` only populate under a real request context, exactly as designed).
+4. **Full test suite: 111/111 passing**, no regressions — re-run again after the `audit_log` grant fix, still 111/111.
+
+**Review sequence before landing on `main`:** the SQL for both the original three-table tightening and the `audit_log` follow-up fix was shown and explicitly approved before running against production, in that order; the pre-commit read of the diff is what caught `audit_log`'s inconsistent lockout in the first place, folded into this same entry rather than opened as a new numbered issue, since nothing had been committed yet at that point.
+
+**Not a blueprint deviation — infrastructure hardening.** `blueprint.md`/`implementation-guide.md` never specified RLS policy shape beyond "the backend uses service_role" (Section 15/`implementation-guide.md` Section 9); the original `authenticated_full_access` policy was itself a post-Phase-6 addition (#8), not a locked blueprint value, so tightening it doesn't reverse or contradict anything the design docs committed to.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
