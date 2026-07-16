@@ -42,12 +42,37 @@ class MemoryStore:
         records.append(record)
         self.save(records)
 
+    def get(self, record_id: str) -> MemoryRecord | None:
+        if self._path is None:
+            return db.fetch_memory_by_id(record_id)
+        for record in self.load():
+            if record.id == record_id:
+                return record
+        return None
+
+    def update(self, record: MemoryRecord) -> None:
+        if self._path is None:
+            db.update_memory(record)
+            return
+        records = [record if r.id == record.id else r for r in self.load()]
+        self.save(records)
+
+
+VOICE_SAMPLE_CAP = 10
+
 
 def append_voice_sample(brand_kit: BrandKit, approach_value: str, text: str) -> BrandKit:
     """Append approved copy to the register (poetic|direct) matching the post's approach
     via APPROACH_REGISTER. Returns a new BrandKit — callers are responsible for
-    persisting it (no brand_kit store exists yet; that lands with routes/brand.py)."""
+    persisting it (routes/export.py calls db.upsert_brand_kit() with the result).
+
+    Enforces a FIFO cap of VOICE_SAMPLE_CAP entries per register (logbook #35): once
+    a register is at the cap, the oldest sample is dropped before the new one is
+    appended, so the compounding mechanism can't grow the few-shot block unbounded."""
     register = APPROACH_REGISTER[approach_value]
     samples = brand_kit.voice_samples.model_copy(deep=True)
-    getattr(samples, register).append(text)
+    register_list = getattr(samples, register)
+    if len(register_list) >= VOICE_SAMPLE_CAP:
+        del register_list[0]
+    register_list.append(text)
     return brand_kit.model_copy(update={"voice_samples": samples})

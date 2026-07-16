@@ -96,6 +96,11 @@ class GenerateResponse(BaseModel):
     masthead: str
     hero_image_base64: str | None = None
     validation_errors: list[str] = []
+    # The MemoryRecord's id (logbook #35) -- generated server-side in
+    # _generate_for_brief below and always persisted, but previously discarded
+    # rather than returned. routes/export.py's confirm endpoint needs it to know
+    # which draft record a given editor session is confirming.
+    memory_id: str
 
 
 class RegenerateSlideRequest(BaseModel):
@@ -207,6 +212,7 @@ async def _generate_for_brief(
         masthead=masthead,
         hero_image_base64=base64.b64encode(hero_bytes).decode("ascii") if hero_bytes else None,
         validation_errors=validation.errors,
+        memory_id=record.id,
     )
 
 

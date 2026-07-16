@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routes.export import router as export_router
 from app.routes.generate import router as generate_router
 from app.routes.picks import router as picks_router
 from app.routes.sources import router as sources_router
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(export_router)
 app.include_router(generate_router)
 app.include_router(picks_router)
 app.include_router(sources_router)

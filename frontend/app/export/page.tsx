@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { confirmExport } from "@/lib/api";
 import type { GenerateResponse } from "@/lib/api-types";
 import { resolveTokens } from "@/lib/brand-tokens";
 import { parseMasthead } from "@/lib/masthead";
@@ -37,6 +38,22 @@ export default function ExportPage() {
   const [rendered, setRendered] = useState<RenderedSlide[] | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Tracks that "Save images" was actually invoked — same standard as `copied`
+  // above, just without the 2s auto-revert (that part is copied's button-label
+  // behavior specifically, not a general pattern this needs).
+  const [savedImages, setSavedImages] = useState(false);
+  // Defaults off; auto-flips true the first time handleDownloadAll() fires (a real
+  // save, not just viewing the preview) and never auto-reverts after that — she can
+  // still manually turn it back off, and a second "Save images" tap won't re-force
+  // it back on if she did.
+  const [trainVoice, setTrainVoice] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  // Set only when train_voice was true and voice_training_status comes back
+  // "failed" — a brief, non-blocking heads-up before navigating home as normal.
+  // Not a recovery flow: no retry button, nothing persisted here; the failure is
+  // already logged server-side (routes/export.py) for manual replay if it matters.
+  const [doneNotice, setDoneNotice] = useState<string | null>(null);
 
   // sessionStorage isn't available during SSR, so the initial data load must happen
   // client-side in an effect (not a lazy useState initializer) — otherwise the
@@ -91,14 +108,38 @@ export default function ExportPage() {
 
   function handleDownloadAll() {
     if (!rendered) return;
+    if (!savedImages) {
+      setTrainVoice(true);
+    }
+    setSavedImages(true);
     rendered.forEach((slide, i) => {
       setTimeout(() => downloadBlobUrl(slide.url, slide.filename), i * 300);
     });
   }
 
-  function handleDone() {
-    clearCurrentPost();
-    router.push("/");
+  async function handleDone() {
+    if (!data) return;
+    setConfirming(true);
+    setConfirmError(null);
+    try {
+      const result = await confirmExport(data.memory_id, data.post.caption, data.post.slides, trainVoice);
+      if (trainVoice && result.voice_training_status === "failed") {
+        // The export itself succeeded — nothing here should block getting back home,
+        // just make the training miss visible before she leaves the screen.
+        setDoneNotice("Exported! (Voice training didn't complete this time — no action needed.)");
+        setTimeout(() => {
+          clearCurrentPost();
+          router.push("/");
+        }, 2500);
+        return;
+      }
+      clearCurrentPost();
+      router.push("/");
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfirming(false);
+    }
   }
 
   if (!data) {
@@ -164,8 +205,22 @@ export default function ExportPage() {
         Save the images and copy the caption, then post from the Instagram app.
       </p>
 
-      <button style={ghostButtonStyle} onClick={handleDone}>
-        Done — back to home
+      <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, padding: "4px 2px" }}>
+        <input
+          type="checkbox"
+          checked={trainVoice}
+          onChange={(e) => setTrainVoice(e.target.checked)}
+        />
+        Use this post to improve future writing
+      </label>
+
+      {confirmError && <ErrorBanner message={confirmError} />}
+      {doneNotice && (
+        <p style={{ fontSize: 13, opacity: 0.75, textAlign: "center" }}>{doneNotice}</p>
+      )}
+
+      <button style={ghostButtonStyle} onClick={handleDone} disabled={confirming}>
+        {confirming ? "Saving…" : "Done — back to home"}
       </button>
     </main>
   );

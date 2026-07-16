@@ -23,6 +23,17 @@ create table if not exists brand_kit (
     updated_at timestamptz not null default now()
 );
 
+-- Structural safeguard, not just a "the code should behave" hope (logbook #35):
+-- db.upsert_brand_kit()'s original #9 implementation upserted with no `id` in the
+-- payload, which -- the first time a caller other than the seed-on-empty path ever
+-- ran it (routes/export.py's voice-compounding write) -- silently INSERTed a second
+-- row instead of updating the existing one, confirmed live. upsert_brand_kit() is
+-- fixed to look up and update the existing row's id explicitly, but this unique
+-- expression index makes a second row structurally impossible regardless of what
+-- application code does going forward -- every row's `(true)` collides with every
+-- other row's, so only one can ever exist.
+create unique index if not exists brand_kit_singleton_idx on brand_kit ((true));
+
 create table if not exists memory (
     id text primary key,
     date date not null,
@@ -36,7 +47,21 @@ create table if not exists memory (
     fingerprint text not null,
     source_ids jsonb not null default '[]',
     status text not null,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    -- Added for export-confirmation (logbook #35, #31/#33): real content + a real
+    -- exported timestamp, instead of only the 80-char truncated `hook`. `slides` is
+    -- the same discriminated-union shape (template_id + template fields) as
+    -- GeneratedPost.slides / models/post.py -- validated through that union at write
+    -- time (routes/export.py), not stored as opaque JSON.
+    caption text not null default '',
+    slides jsonb not null default '[]',
+    exported_at timestamptz,
+    -- NULL means voice training hasn't successfully completed yet -- same
+    -- meaningful-null pattern as exported_at. Deliberately decoupled from `status`
+    -- (logbook #35 fix): a training failure must not permanently strand the record
+    -- with no way to retry just the training half, which is what a single shared
+    -- idempotency guard on status alone caused before this column existed.
+    voice_trained_at timestamptz
 );
 
 create index if not exists memory_category_status_idx on memory (category, status);

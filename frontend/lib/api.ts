@@ -4,6 +4,7 @@ import type {
   Approach,
   ContentBrief,
   DailyPicksResult,
+  ExportConfirmResponse,
   GeneratedPost,
   GenerateResponse,
   PasteLinkBriefResult,
@@ -126,5 +127,22 @@ export function reshuffleImage(
   return request<{ hero_image_base64: string }>("/generate/reshuffle-image", {
     method: "POST",
     body: JSON.stringify({ brief, variant }),
+  });
+}
+
+export function confirmExport(
+  memoryId: string,
+  caption: string,
+  slides: ApiSlide[],
+  trainVoice: boolean,
+): Promise<ExportConfirmResponse> {
+  return request<ExportConfirmResponse>("/export/confirm", {
+    method: "POST",
+    body: JSON.stringify({
+      memory_id: memoryId,
+      caption,
+      slides,
+      train_voice: trainVoice,
+    }),
   });
 }

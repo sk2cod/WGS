@@ -121,6 +121,29 @@ export interface GenerateResponse {
   masthead: string;
   hero_image_base64: string | null;
   validation_errors: string[];
+  // The MemoryRecord's id (logbook #35) — needed by /export/confirm to know which
+  // draft record a given editor/export session is confirming.
+  memory_id: string;
+}
+
+export interface ExportConfirmRequest {
+  memory_id: string;
+  caption: string;
+  slides: ApiSlide[];
+  train_voice: boolean;
+}
+
+export type VoiceTrainingStatus = "appended" | "already_trained" | "not_requested" | "failed";
+
+export interface ExportConfirmResponse {
+  memory_id: string;
+  status: string;
+  // True if the record's status was already "exported" before this call (content was
+  // not re-persisted this time) — describes the content-persist half only.
+  already_exported: boolean;
+  // Describes the training half independently of the above — see
+  // backend/app/routes/export.py's ExportConfirmResponse for what each value means.
+  voice_training_status: VoiceTrainingStatus;
 }
 
 export interface DailyPick {

@@ -52,27 +52,42 @@ def fetch_brand_kit() -> BrandKit | None:
 
 
 def upsert_brand_kit(kit: BrandKit) -> None:
-    get_client().table("brand_kit").upsert(
-        {
-            "brand_name": kit.brand_name,
-            "handle": kit.handle,
-            "masthead_short": kit.masthead_short,
-            "niche": kit.niche,
-            "audience": kit.audience,
-            "voice_traits": kit.voice_traits,
-            "voice_samples_poetic": kit.voice_samples.poetic,
-            "voice_samples_direct": kit.voice_samples.direct,
-            "forbidden": kit.forbidden,
-            "mood_palettes": {k: v.model_dump() for k, v in kit.mood_palettes.items()},
-            "text_color": kit.text_color,
-            "background_color": kit.background_color,
-            "font_heading": kit.font_heading,
-            "font_script": kit.font_script,
-            "font_body": kit.font_body,
-            "default_tone": kit.default_tone,
-            "signature_cta": kit.signature_cta,
-        }
-    ).execute()
+    """Update the one brand_kit row if it exists; insert only if the table is
+    genuinely empty (the seed-on-empty case, taxonomy/wgs_brand_kit.get_brand_kit()).
+
+    `BrandKit` carries no `id` field, and Supabase's `.upsert()` with no `id` in the
+    payload and no existing value to conflict on silently INSERTs a new row instead
+    of updating — confirmed live (logbook #35): the first real caller other than the
+    seed-on-empty path (routes/export.py's voice-compounding write) produced a
+    second, duplicate brand_kit row rather than updating the existing one. Looking
+    the current row's id up fresh and updating by it, instead of upserting blind,
+    is what makes this correct regardless of caller. `brand_kit_singleton_idx`
+    (schema.sql) is the DB-level backstop in case this ever regresses."""
+    client = get_client()
+    payload = {
+        "brand_name": kit.brand_name,
+        "handle": kit.handle,
+        "masthead_short": kit.masthead_short,
+        "niche": kit.niche,
+        "audience": kit.audience,
+        "voice_traits": kit.voice_traits,
+        "voice_samples_poetic": kit.voice_samples.poetic,
+        "voice_samples_direct": kit.voice_samples.direct,
+        "forbidden": kit.forbidden,
+        "mood_palettes": {k: v.model_dump() for k, v in kit.mood_palettes.items()},
+        "text_color": kit.text_color,
+        "background_color": kit.background_color,
+        "font_heading": kit.font_heading,
+        "font_script": kit.font_script,
+        "font_body": kit.font_body,
+        "default_tone": kit.default_tone,
+        "signature_cta": kit.signature_cta,
+    }
+    existing = client.table("brand_kit").select("id").limit(1).execute()
+    if existing.data:
+        client.table("brand_kit").update(payload).eq("id", existing.data[0]["id"]).execute()
+    else:
+        client.table("brand_kit").insert(payload).execute()
 
 
 def fetch_memory() -> list[MemoryRecord]:
@@ -80,8 +95,19 @@ def fetch_memory() -> list[MemoryRecord]:
     return [MemoryRecord.model_validate(row) for row in res.data]
 
 
+def fetch_memory_by_id(record_id: str) -> MemoryRecord | None:
+    res = get_client().table("memory").select("*").eq("id", record_id).limit(1).execute()
+    if not res.data:
+        return None
+    return MemoryRecord.model_validate(res.data[0])
+
+
 def append_memory(record: MemoryRecord) -> None:
     get_client().table("memory").insert(record.model_dump(mode="json")).execute()
+
+
+def update_memory(record: MemoryRecord) -> None:
+    get_client().table("memory").update(record.model_dump(mode="json")).eq("id", record.id).execute()
 
 
 def get_cached_hero_url(cache_key: str) -> str | None:
