@@ -8,6 +8,7 @@ from app.engine.generator import (
     critique_post,
     draft_post,
     generate_post,
+    refine_post,
     regenerate_slide,
     slide_roles_for,
 )
@@ -277,6 +278,77 @@ def test_regenerate_slide_out_of_range_raises():
     llm = _QueueLLM([])
     with pytest.raises(IndexError):
         regenerate_slide(_sample_brief(), WGS_BRAND_KIT, _sample_draft(), 99, llm)
+
+
+# Logbook #29: critique_post was checking the draft against _APPROACH_DEFINITIONS
+# with nothing telling it slide count/shape is a fixed, non-negotiable brief
+# constraint -- so an approach that "wants" more room than the format gives
+# (single_image's 1 slide, most visibly) reliably produced a "needs more slides"
+# complaint, which refine_post then complied with, overriding the brief's actual
+# shape. These tests cover the fix: critique_post states the constraint explicitly
+# (both formats, not just single_image), and refine_post restates it as a backstop.
+
+
+def test_critique_states_fixed_slide_shape_for_carousel():
+    llm = _QueueLLM(["no changes needed"])
+    critique_post(_sample_brief(), WGS_BRAND_KIT, _sample_draft(), llm)
+    prompt = llm.prompts[0]
+    assert "slide count and roles are fixed by the brief" in prompt
+    assert "NOT" in prompt and "something to critique" in prompt
+    assert "exactly 4 slides" in prompt
+    assert "carousel_cover, carousel_body_teaching, carousel_body_teaching, carousel_closing" in prompt
+    assert "Never suggest the post needs more slides" in prompt
+    # Deliberately narrow: content-quality critique must still be invited, not
+    # suppressed wholesale by the new shape instruction.
+    assert "A thin or underspecific single slide is still a fair critique" in prompt
+
+
+def test_critique_states_fixed_slide_shape_for_single_image():
+    llm = _QueueLLM(["no changes needed"])
+    draft = GeneratedPost(
+        slides=[StatSlide(kicker="Did you know", number="42%", supporting_line="a stat")],
+        caption="a caption",
+        hashtags=["#a"],
+    )
+    critique_post(_citation_required_brief(), WGS_BRAND_KIT, draft, llm)
+    prompt = llm.prompts[0]
+    assert "exactly 1 slide (single_stat)" in prompt
+    assert "regardless of format" in prompt
+
+
+def test_refine_prompt_restates_fixed_shape_as_backstop():
+    llm = _QueueLLM(
+        [
+            json.dumps(
+                {
+                    "slides": [
+                        {"kicker": "Did you know", "number": "42%", "supporting_line": "a stat"}
+                    ],
+                    "caption": "a caption",
+                    "hashtags": ["#a"],
+                }
+            )
+        ]
+    )
+    draft = GeneratedPost(
+        slides=[StatSlide(kicker="Did you know", number="42%", supporting_line="a stat")],
+        caption="a caption",
+        hashtags=["#a"],
+    )
+    brief = _citation_required_brief()
+    refine_post(brief, WGS_BRAND_KIT, draft, "this needs more room to explore", llm)
+    prompt = llm.prompts[0]
+    assert "slide count and roles are fixed at exactly 1 slide (single_stat)" in prompt
+    assert "overrides anything the critique implies to the contrary" in prompt
+    assert "keep the exact same number and type of slides as the draft" in prompt
+
+
+def test_refine_still_respects_correct_slide_count_when_critique_agrees():
+    """The backstop shouldn't break the normal, correct path: critique says no
+    changes needed, refine returns the draft unchanged, same slide count."""
+    llm = _QueueLLM([_DRAFT_CAROUSEL_JSON])
+    post = refine_post(_sample_brief(), WGS_BRAND_KIT, _sample_draft(), "no changes needed", llm)
+    assert len(post.slides) == 4
 
 
 def test_body_slide_uses_old_fragment_schema_for_non_teaching_approach():

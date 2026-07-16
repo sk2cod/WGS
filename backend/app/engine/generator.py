@@ -364,6 +364,28 @@ def critique_post(
         if "carousel_cover" in roles
         else ""
     )
+    # logbook #29's actual root cause, not the one originally suspected: nothing told
+    # critique that slide count/shape is a fixed, non-negotiable constraint from the
+    # brief (slide_roles_for, decided in Python, blueprint decision 3) — so checking
+    # the draft against _APPROACH_DEFINITIONS (below), which describes what an
+    # approach ideally wants, reliably produced a "this needs more slides/structure"
+    # complaint for any approach that wants more room than the format actually gives
+    # (single_image's fixed 1 slide, most visibly). refine_post then complied,
+    # expanding the slide count to satisfy a complaint that was never valid in the
+    # first place. This instruction is deliberately narrow: it rules out shape
+    # complaints, not content-quality complaints — a genuinely thin single slide is
+    # still a fair critique.
+    shape_instruction = (
+        f"This post's slide count and roles are fixed by the brief and are NOT "
+        f"something to critique, regardless of format: exactly {len(roles)} slide"
+        f"{'s' if len(roles) != 1 else ''} ({', '.join(roles)}). Never suggest the "
+        "post needs more slides, fewer slides, or a different structure to fully "
+        "deliver the approach — even if the approach would normally want more room. "
+        "If the approach's content genuinely doesn't fit, that's a content problem "
+        "to solve within the existing slide(s) (tighten, prioritize, cut), not a "
+        "shape problem to flag. A thin or underspecific single slide is still a "
+        "fair critique — 'this needs another slide' is not. "
+    )
     approach_instruction = (
         f"Separately check whether the post's structure actually delivers the "
         f"'{brief.approach.value}' approach as defined above, not merely labeled with "
@@ -394,7 +416,7 @@ def critique_post(
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         "Critique it against the brand voice, the forbidden list, tone, word limits, and "
         f"whether it reads as specific rather than generic. {citation_instruction}"
-        f"{kicker_instruction}{approach_instruction}{voice_instruction}"
+        f"{shape_instruction}{kicker_instruction}{approach_instruction}{voice_instruction}"
         f"{specificity_instruction}{actionability_instruction}{saveability_instruction}"
         "Be concrete and short — list only real problems, or say 'no changes needed'."
     )
@@ -410,11 +432,24 @@ def refine_post(
 ) -> GeneratedPost:
     roles = slide_roles_for(brief)
     system = _brief_system_prompt(brief, brand_kit, roles)
+    # Backstop for logbook #29: critique_post's own shape_instruction should already
+    # stop a "needs more slides" complaint from ever being generated, but live
+    # evidence showed the model overriding its own stated slide-count constraint
+    # once already (mid-generation, unprompted) when a critique implied more
+    # structure was needed — so the constraint isn't reliably strong enough stated
+    # only once, in the system prompt. Restating it here, at the exact point the
+    # model is told to "apply the critique," is the second layer.
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         f"Critique:\n{critique}\n\n"
         "Apply the critique and return the improved final post in the same JSON shape. "
-        "If the critique said no changes needed, return the draft unchanged."
+        "If the critique said no changes needed, return the draft unchanged.\n\n"
+        f"The slide count and roles are fixed at exactly {len(roles)} slide"
+        f"{'s' if len(roles) != 1 else ''} ({', '.join(roles)}) — this overrides "
+        "anything the critique implies to the contrary. Even if the critique suggests "
+        "the post needs more slides, fewer slides, or a different structure, keep "
+        "the exact same number and type of slides as the draft and only change the "
+        "content of those slides."
     )
     raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=1500)
     return _parse_post(raw, roles, brand_kit)
