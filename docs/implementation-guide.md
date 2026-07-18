@@ -496,10 +496,12 @@ Minimal tables for Phase 1 (single user):
 
 - `brand_kit` — one row (the creator's kit); `voice_samples` stored as two arrays (`poetic`, `direct`) that each grow independently as she edits/approves posts.
 - `topics` — seeded from `topics.yaml` (or kept file-based and read at startup; DB optional for topics in Phase 1).
-- `memory` — one row per generated post (`MemoryRecord`).
+- `memory` — one row per generated post (`MemoryRecord`). Beyond the original fields, also carries `caption text`, `slides jsonb` (the same discriminated-union shape as `GeneratedPost.slides`, validated through it at write time), `exported_at timestamptz`, and `voice_trained_at timestamptz` (all added in #35, for the export-confirmation event; `exported_at`/`voice_trained_at` are nullable — meaningful-null, unset until content is genuinely persisted / voice training genuinely completes — two independent idempotency checks, not one shared guard).
 - `image_cache` — keyword → Supabase Storage URL of the duotoned hero.
+- `audit_log` — append-only record of every insert/update/delete on `brand_kit` and `memory`, through any path (app, dashboard, direct SQL), written by a `security definer` trigger (added in #34).
 - Supabase Storage bucket `heroes/` — the duotoned images.
 - Supabase Auth — one user.
+- **RLS (tightened in #34):** `brand_kit`, `memory`, `image_cache`, and `audit_log` are service-role-only. The original `authenticated_full_access` policy (`FOR ALL` / `using(true)` / `with check(true)` — fully open to any authenticated session) is gone; `authenticated` is revoked entirely from all four tables, same as `anon` already was. Only the backend's service-role key (which bypasses RLS as a role property) can read or write.
 
 ---
 

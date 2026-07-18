@@ -148,7 +148,7 @@ APPROACH_REGISTER = {
 
 `brief_builder` looks up the post's approach, resolves the register, and injects **only that list** into `ContentBrief.brand_voice_samples` — the brief itself never carries both, only the resolved one. Same pattern as mood resolution: the backend picks, downstream consumers just receive the answer.
 
-**The compounding mechanism:** every export and every edit she makes appends to the matching register's list. Weeks in, generation pattern-matches to things she's actually approved, not to a static description of her voice. This is the single highest-leverage input against generic output.
+**The compounding mechanism:** an explicit, off-by-default toggle — "Use this post to improve future writing" (`train_voice`), which auto-flips on the first time she taps Save Images but can still be switched off before she confirms — appends the export's best line to the matching register; it is not automatic capture on every export or edit (see logbook #35 for why the trigger was deliberately built this way). Weeks in, generation pattern-matches to things she's actually approved, not to a static description of her voice. This is the single highest-leverage input against generic output.
 
 **Locked values for Women's Growth Society (WGS)** — decided through direct review, ready to seed the real `BrandKit` row. **Note:** `voice_samples.direct` below was revised 2026-07-15 (logbook #30) — the original 5 samples were all workplace/meeting-themed, which was found to be actively pulling `draft_post` toward inventing office scenarios on topics that had nothing to do with work. This is a deliberate deviation from an otherwise-locked value; see the logbook for root cause and verification.
 
@@ -405,7 +405,7 @@ class MemoryRecord(BaseModel):
     status: Literal["draft", "exported"]
 ```
 
-Feeds the non-repetition filter (angle engine + daily picks) and the voice store (exported posts + her edits append to `BrandKit.voice_samples`). It's also what the masthead counts against: the running number on a post's masthead is `1 + count of MemoryRecords where category matches and status == "exported"` — a simple, deterministic Python query, no LLM involved.
+Feeds the non-repetition filter (angle engine + daily picks) and the voice store — an explicit, off-by-default `train_voice` toggle on export (Section 4) appends to `BrandKit.voice_samples`; this is not automatic on every export or edit. It's also what the masthead counts against: the running number on a post's masthead is `1 + count of MemoryRecords where category matches and status == "exported"` — a simple, deterministic Python query, no LLM involved.
 
 ---
 
