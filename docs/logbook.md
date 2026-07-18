@@ -1400,6 +1400,8 @@ on every generation. The production Supabase `brand_kit` row also still
 needs a separate, explicit decision (see Fix 1's caveat above) before
 this fix is live, independent of the git push decision.
 
+**Correction (this session):** both decisions above were in fact made — commit `7f3474c` is on `origin/main`, and the production Supabase `brand_kit.voice_samples_direct` row was independently confirmed live-matching the revised samples via a direct read-only Supabase REST query (`updated_at: 2026-07-16T01:05:57Z`). The lines above were accurate when written but were never updated after both decisions landed.
+
 ---
 
 ## 31. OPEN — the blueprint's compounding-voice mechanism has never actually persisted anything in production
@@ -1530,6 +1532,10 @@ rendered width). `npx tsc --noEmit` — clean, no type errors from the
 unused-but-still-passed `category`/`number` fields on `MastheadInfo`.
 
 **Not committed or pushed** — held for review per explicit instruction.
+
+**Correction (this session):** this was in fact committed (`65166fa`), pushed, and is confirmed live in production — see verification below. The line above was accurate when written but was never updated after approval.
+
+**Deployed verification (this session):** a real `POST /api/render` call against `https://wgs-studio.vercel.app`, deliberately sending non-empty `category`/`number` (`"MINDSET"` / `"14"`) in the payload — the same technique this entry's own verification used — confirmed the live rendered slide shows only `"WGS"`, no rule, no category/number text, even though that data was explicitly present in the request.
 
 ---
 
