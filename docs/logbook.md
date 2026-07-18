@@ -1742,6 +1742,20 @@ extraction has to be wired into the live generation path rather than read back f
 
 ---
 
+## 38. PicksStore persistence gap (flagged in #33, never chased) — investigated fully, classified as deferred, low-stakes
+
+**What it is.** `PicksStore` (`engine/selector.py:62-82`) is unconditionally file-backed — `.cache/picks.json` on Railway's ephemeral filesystem, no Supabase branch at all. This is unlike `MemoryStore`/`brand_kit`/`image_cache`/`audit_log`, which are all Supabase-backed with RLS locked to `service_role` per #34's pattern. First flagged as a discrepancy in #33 ("`PicksStore`... is real but unconditionally file-backed — no Supabase branch, unlike `MemoryStore`... noted, not chased further") but never investigated further until today.
+
+**Findings.** `PicksStore` holds one JSON blob per date: a `DailyPicksResult` — 3 `DailyPick` records (`topic_id`, `topic_name`, `category`, `source_type`, `approach`, `mood`, `angle`, `hook`, `thumbnail_concept`, `awareness_day_name`) plus a `rerolls_used` counter. On a Railway restart, this file is wiped. Traced what a recompute after loss actually does: topic *selection* is deterministically reproducible (`random.Random(target_date.isoformat())` — same date, same topics/memory data ⇒ same 3 topics), but `angle`/`hook`/`thumbnail_concept` come from real, unseeded LLM calls (`generate_angle`/`_generate_pitch`) and get silently rewritten to different wording on recompute — she could see today's picks change under her with no action on her part. `rerolls_used` also resets to 0, quietly lifting the `MAX_REROLLS_PER_DAY` cap. Confirmed nothing downstream reads from `PicksStore`: export and voice-compounding both key off `MemoryStore`/`memory_id`, never a `DailyPick` — anything she's actually acted on (generated, edited, exported) already lives in `MemoryStore`, which is Supabase-backed and unaffected by this gap. Grepped `docs/logbook.md` for `picks`/`selector` — no incident has ever been tied to this; it's been a theoretical risk since #33, never observed in practice.
+
+**Decision.** Classified as real-but-low-stakes: suggestion-tier state (today's 3 picks + reroll count), not lost work — nothing she's committed to is at risk. Migration scope, if picked up later, is already known and small, mirroring `MemoryStore`'s existing `Path | None` pattern exactly: a `daily_picks` table in `schema.sql` (RLS-locked the same way as the other four tables), `fetch_daily_picks()`/`upsert_daily_picks()` in `db/supabase.py`, and changing `PicksStore.__init__`'s default from `path: Path = PICKS_PATH` to `path: Path | None = None` with a `None`-branch in `get()`/`save()` — three files, no call-site or test changes needed (`routes/picks.py` already constructs `PicksStore()` bare; tests already pass an explicit `path=`). **Explicitly deferred, not fixed, per this decision** — no code touched.
+
+**Closing the loop, per the standing rule this session added to `CLAUDE.md`:** this entry's status is "deferred," not "fixed" or "declined" — if it's picked up later, that decision needs to come back and close this entry the same way #30/#32 got corrected, not be left as the last word here indefinitely.
+
+**Not a blueprint deviation** — an infrastructure-parity gap under a documented, deliberate decision to leave it, not a design decision reversed.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
