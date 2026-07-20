@@ -40,3 +40,12 @@ SINGLE_IMAGE_STAT_APPROACHES: set[str] = {
     Approach.STAT_RESEARCH.value,
 }
 SINGLE_IMAGE_SAFE_APPROACHES: set[str] = SINGLE_IMAGE_QUOTE_APPROACHES | SINGLE_IMAGE_STAT_APPROACHES
+
+# Carousel-only "v1" content-voice experiment (logbook #39) — restricts carousel's
+# sampled approach pool to just these two while the new connected-micro-essay arc
+# instruction (engine/generator.py) is trialed. The other 6 approaches are untouched
+# in code and remain fully reachable for single_image (SINGLE_IMAGE_SAFE_APPROACHES
+# etc. above, unchanged) — this pool only ever gates carousel's sample_cell() branch.
+# Experimental, pending real-output review — see logbook #39 before expanding or
+# removing this restriction.
+CAROUSEL_V1_APPROACHES = [Approach.STORY, Approach.QUESTION_REFLECTION]

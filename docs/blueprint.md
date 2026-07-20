@@ -246,6 +246,13 @@ APPROACH_REGISTER = {   # which voice register (Section 4) each approach draws f
 }
 ```
 
+**Note:** as of logbook #39, carousel's sampled approach pool is temporarily restricted to
+just `story` and `question_reflection` (`CAROUSEL_V1_APPROACHES`) as part of an active,
+unverified "v1" content-voice experiment — the other 6 approaches above remain fully
+defined in code and fully reachable for `single_image`, which this experiment does not
+touch at all. This is a deliberate, carousel-only deviation from the 8-approach library
+above, not a change to the library itself; see the logbook for why and its current status.
+
 ### What's generated (every time, at runtime)
 
 The angle engine doesn't author anything — it **samples a combination** from what's already there and asks the model to fill it in:
@@ -292,6 +299,15 @@ Sampling within one topic solves *depth*. **Breadth** — actually walking all 4
 **Canvas:** default **1080×1350 (4:5)** — fills the most feed space on mobile. Every template is designed with a **centered 3:4 safe zone** for text, faces, and logos, because Instagram's profile grid now crops previews to roughly 3:4 even though the feed itself shows up to 4:5 — this keeps the grid looking intentional without sacrificing feed height. (Not a hard requirement to revisit now — noted so it's not lost.)
 
 **Every output is a package:** image(s) **+** caption **+** hashtag set, all from the same brief, all through the same critique pass.
+
+**Note:** as of logbook #39, the caption rule above (and the underlying
+specificity/actionability/saveability content-quality instructions implementing it in
+`generator.py`) has a carousel-only "v1" override in an active, unverified experiment —
+the caption instead mirrors the whole post's arc as a second telling of the same
+micro-essay, and a closing reflection or open question is treated as a fully valid
+ending rather than requiring an actionable takeaway. `single_image` is completely
+untouched and still follows the rule as originally written above. See the logbook for
+the full text and current status.
 
 ---
 

@@ -1756,6 +1756,439 @@ extraction has to be wired into the live generation path rather than read back f
 
 ---
 
+## 39. OPEN, EXPERIMENTAL — carousel-only "v1" content-voice change: connected micro-essay arc, replacing the generic quality checklist for carousel
+
+**Status: active experiment, not yet verified against real output — implementation and
+documentation only, no live `/generate` calls run as part of this entry. Needs the same
+"close the loop" treatment (per the standing `CLAUDE.md` logbook-discipline rule) once
+evaluated against real generations — do not treat this entry as settled until a follow-up
+confirms or reverts it.**
+
+**Why:** direct creator feedback that carousel output felt fragmented — no single
+narrative throughline across a carousel's slides, each slide instead independently
+satisfying the same generic quality checklist (specificity/actionability/saveability)
+rather than the whole post building one connected idea. Nothing in the prompt inventory
+this session's read-only review surfaced was a bug — draft/critique/refine already
+operate on the whole post as one JSON object per call, with no per-slide isolation in the
+main pipeline (see that review) — so this is a content-voice change, not a pipeline-shape
+fix: the generic per-slide-satisfying checklist itself was identified as the actual
+cause of "list of related points" output, not a coherence gap between slides.
+
+**Scope — carousel only, everywhere, gated on `format == Format.CAROUSEL`.**
+`single_image` is deliberately, completely untouched by every part of this change,
+pending a separate future decision on whether to extend it there at all.
+
+### 1. Approach pool restriction
+
+`taxonomy/approaches.py` gained `CAROUSEL_V1_APPROACHES = [Approach.STORY,
+Approach.QUESTION_REFLECTION]`. `angle_engine.py::sample_cell()` gained an
+`elif format == Format.CAROUSEL` branch sampling only from this 2-approach pool, ahead of
+the existing unrestricted `else` (which still covers both `format=None` — the daily-picks
+pitch path that doesn't know format yet, per #26 — and, previously, carousel itself).
+`format == Format.SINGLE_IMAGE`'s branch (#26's safe pool, #28's quote/stat narrowing) is
+untouched, verbatim.
+
+**The other 6 approaches (`educational`, `myth_vs_fact`, `checklist`, `stat_research`,
+`framework`, `common_mistakes`) remain fully defined in code** — in `Approach`, in
+`APPROACHES`, in `_APPROACH_DEFINITIONS`, in `TEACHING_BODY_APPROACHES` — nothing about
+them was removed or altered. They are simply unreachable for carousel's sampler while
+this experiment runs; `single_image` and the daily-picks pitch path can still reach all
+8 exactly as before.
+
+**Verified (local only, no LLM calls):** 300 seeded trials of `sample_cell(format=
+Format.CAROUSEL)` reached only `{story, question_reflection}`; 300 trials each of
+`format=Format.SINGLE_IMAGE` and `format=None` were unchanged from pre-#39 behavior
+(4-approach safe pool and full 8-approach pool respectively). Full backend suite:
+**126/126 passing**, no regressions.
+
+### 2. Shared system prompt branch (`_brief_system_prompt`, `generator.py`)
+
+Added an `if brief.format == Format.CAROUSEL` branch that replaces
+`_SPECIFICITY_INSTRUCTION` / `_ACTIONABILITY_INSTRUCTION` / `_SAVEABILITY_INSTRUCTION` /
+`_CAPTION_INSTRUCTION` with three new carousel-only constants, verbatim as specified:
+
+**New arc instruction (carousel only):**
+> This post is one micro-essay, not a list of related points. Every slide stays with a single anchor — one concrete, real, specific thing drawn from history, culture, another language, nature, or literature: a tradition, a custom, an etymology, a philosophical idea, a moment from someone's real life. Favor an anchor that carries its own specific word or phrase from another era, culture, or discipline when one genuinely fits — this is what gives the post its editorial, researched feel, not generic inspiration. Never introduce a second, unrelated example partway through. Deepen the one you opened with instead of moving to a new one.
+>
+> Open on the anchor itself, named plainly, by slide 1 or 2 — concrete scene-setting is fine, abstract framing is not. Spend a slide or two with the anchor alone, on its own terms, before turning to the reader at all. Make one or two turns toward the reader or the human condition, no more, each carried by a tentative word — "I wonder," "perhaps," "maybe," "somewhere along the way." Do not let this language become the default register of every slide. Once a turn has landed, the following line can state the reframe more plainly again. Close on an image or a general truth that lingers — never advice, never an instruction, never a command aimed at "you." Let the reader draw the connection to their own life themselves.
+>
+> Biographical or factual specifics that aren't independently verifiable get a soft hedge ("seemed to," "known for") rather than being stated as flat fact.
+>
+> Write in plain, declarative sentences everywhere except the one or two pivot points.
+
+**Caption instruction override (carousel only, replaces "hook only, never a restatement"):**
+> The caption mirrors the whole post's arc in prose — the same anchor, the same movement from observation to reframe. It is a second, complete telling of the same micro-essay, not a summary, teaser, or restatement.
+
+**Specificity/actionability/saveability override (carousel only):**
+> This post does not need to give the reader something to do. A closing reflection or an open question is just as valid an ending as a concrete action step. Do not force advice or a takeaway if the anchor's reframe doesn't call for one.
+
+`single_image` briefs take the `else` branch — all four original instructions, verbatim,
+unchanged. Since `draft_post`/`critique_post`/`refine_post` all call the same
+`_brief_system_prompt()`, this one branch point is what every carousel generation call in
+this experiment sees.
+
+**Verified (local only):** built one `Format.CAROUSEL` and one `Format.SINGLE_IMAGE`
+`ContentBrief` from the same fixture and diffed the two rendered system prompts — the
+carousel prompt contains the new arc instruction and the v1 caption text and does **not**
+contain the old caption instruction text; the single_image prompt contains the original
+caption and specificity instructions verbatim and does **not** contain the arc
+instruction. No API call made.
+
+### 3. Critique task prompt branch (`critique_post`, `generator.py`)
+
+Added the same `if brief.format == Format.CAROUSEL` gate. For carousel, the existing
+`specificity_instruction` / `actionability_instruction` / `saveability_instruction`
+checks are replaced with one new checklist, verbatim as specified:
+
+> Confirm the post stays with one anchor throughout the whole carousel — flag it only if a new, unrelated example or point appears after slide 1. Confirm the anchor is named plainly by slide 1 or 2, without turning to the reader first. Confirm tentative language ("I wonder," "perhaps," and similar) appears once or twice at most, not on every slide. Confirm no slide addresses the reader directly with an instruction or command. Confirm the caption is a full second telling of the post's arc, not a hook, teaser, or summary. A closing reflection or open question, with no explicit action step, is acceptable and should not be flagged as a missing takeaway.
+
+Everything else in `critique_post` — the citation check, the logbook #37 shape
+instruction, the kicker check, the approach-fidelity check, the voice check — is
+unchanged for both formats; only the specificity/actionability/saveability triple is
+swapped for carousel. `single_image` critique is completely unchanged.
+`refine_post` itself required no direct edit: it consumes whatever `_brief_system_prompt()`
+and `critique_post()` already produced, so it automatically inherits the carousel branch
+through those two functions without any of its own logic changing.
+
+### Not done, deliberately
+
+No live `/generate` call, and no change to `_APPROACH_DEFINITIONS['story']` /
+`['question_reflection']` (the existing one-line structural definitions for those two
+approaches are untouched — the new arc instruction sits alongside them, not in place of
+them). Verification against real model output is explicitly a separate next step, not
+part of this entry.
+
+**Blueprint deviation — yes, explicitly.** This is a deliberate, carousel-only departure
+from the approach library (blueprint Section 5) and from the caption/content-quality
+instructions as implemented, made in direct response to creator feedback about output
+quality, not a bug fix. `docs/blueprint.md` Section 5 (the `APPROACHES` list) and Section
+6 (the caption/package rule) were annotated in place — not rewritten — pointing back to
+this entry, same pattern as logbook #30's inline note.
+
+### Round 1 — real-output review, 5 real `/generate`-pipeline calls, 3 bugs found
+
+**Status update: still OPEN/EXPERIMENTAL — this round found problems, it did not close
+the loop.** Ran real, live `draft_post`/`critique_post`/`refine_post`/`generate_angle`
+calls (real Anthropic API, no mocking, no rng seeding) against the 5 real topic ids in
+`topics.yaml` whose name matches "Boundaries" or "Rest" case-insensitively — confirmed by
+grep to be exactly `mindset-boundaries`, `career-boundaries`, `relationships-boundaries`,
+`mindset-rest`, `wellness-rest` (5 pairs, not just the one-per-name assumption). No
+crashes, no JSON-parse failures, no slide-count/shape drift in any of the 5 runs. Approach
+pool restriction held live: only `story` (2/5) and `question_reflection` (3/5) were ever
+sampled, matching the local sampling test from this entry's initial implementation.
+
+**Three real problems surfaced, purely from reading the captured output — no quality
+judgment made yet, per explicit instruction that judgment is a separate step:**
+
+1. **`critique_post`'s output was truncated by `max_tokens=500` in 5 of 5 carousel
+   calls.** Every captured `critique_text` cut off mid-sentence or mid-word (character
+   lengths 1359–1496). The carousel checklist added by this entry replaced 3 short
+   check-instructions with one longer one, on top of the existing citation/shape/
+   kicker/approach/voice checks — the same 500-token budget as before was no longer
+   enough to let the model finish.
+2. **Critique repeatedly flagged the closing slide's `cta` field** (3 of 5 runs) as
+   generic/engagement-bait — but `ClosingSlide.cta` is hardcoded from
+   `brand_kit.signature_cta` in `_build_slide()`, never model output, so this was pure
+   wasted critique-budget on something `refine_post` structurally cannot act on (and,
+   confirmed by diffing draft vs. refined output, never did).
+3. **Kicker/arc tension and anchor-word drift, found by reading the actual text:** the
+   v1 arc instruction's "dwell with the anchor alone before turning to the reader" rule
+   doesn't distinguish the cover's kicker (whose established job, from before this
+   experiment, is to gesture toward the reader) from the body slides — creating an
+   unintended tension the arc instruction never resolved. Separately, in
+   `career-boundaries`'s draft, the cover named one anchor word (`NIYO-NIYO`) while the
+   body introduced a different one (`enryo`) for what was meant to be the same anchor —
+   critique caught this and refine fixed it, but the arc instruction itself said
+   nothing that would have prevented the drift in the first place.
+
+### Round 1 — fixes applied
+
+1. **`critique_post`'s carousel branch max_tokens raised 500 → 800.** single_image's
+   max_tokens left at 500, unchanged — see the CTA-instruction note below for why.
+2. **New unconditional instruction added to `critique_post`'s prompt, both formats
+   (verbatim, exactly as specified):**
+   > Do not evaluate or flag the closing slide's cta field. It is a fixed brand value from brand_kit.signature_cta, not model-generated, and cannot be changed by refine.
+
+   Decided **not** to bump single_image's `max_tokens` for this addition: the
+   instruction tells the model to skip a check, not perform an additional one, so it
+   should shorten expected output rather than lengthen it — noted here rather than
+   applied speculatively.
+3. **Appended (not replacing) to the existing carousel-only v1 arc instruction, verbatim:**
+   > The "dwell with the anchor alone before turning to the reader" rule applies to the body slides. The cover's kicker may still gesture toward the reader as its own hook — that is its separate, established job and is not a violation. If the anchor has a specific name or term, use that exact same word on the cover headline as when it's introduced in the body — don't invent a second name for the same anchor.
+4. **Appended (not replacing) to the existing carousel-only critique checklist, verbatim:**
+   > Confirm the closing slide lands on a declarative image or general truth, not a literal question — this holds even for the question_reflection approach. That approach is satisfied by the post orienting around a genuine open question somewhere in its arc; the final line itself should not be a question mark.
+
+Full backend suite re-run after all four changes: **126/126 passing**, no regressions.
+
+### Round 2 — real-output re-verification, same 5 pairs, fixes only partially held
+
+**Re-ran real, live `/generate`-pipeline calls (same method, same 5 topic ids) after
+applying the round-1 fixes. Two of the four fixes did not fully hold in practice —
+reported plainly, not glossed over:**
+
+- **CTA fix: held completely.** 0 of 5 critique texts mentioned "cta" in any form
+  (round 1 was 3 of 5). Full success.
+- **Critique truncation: only partially fixed.** 2 of 5 critiques now complete cleanly
+  (`career-boundaries`, `relationships-boundaries` — both end on a finished sentence).
+  The other 3 (`mindset-boundaries`, `mindset-rest`, `wellness-rest`) **still truncate
+  mid-sentence or mid-word at the new 800-token ceiling** — e.g. `mindset-boundaries`
+  cuts off inside an unclosed quotation (`"...Caption ends on declarative image
+  ("Their comfort was never a`), `wellness-rest` cuts off immediately after a checklist
+  heading with zero content under it. 800 tokens raised the ceiling but did not clear
+  it — a further increase or a shorter checklist is still an open question, not
+  resolved by this round.
+- **Closing-stays-declarative fix: held in 3 of 5, broken in 2 of 5.** `career-boundaries`,
+  `relationships-boundaries`, and `mindset-rest` all kept a declarative closing line, no
+  question mark. But `mindset-boundaries` and `wellness-rest`'s refined closing slides
+  **both ended in a literal question mark** — the exact anti-pattern the new instruction
+  was meant to stop. In `mindset-boundaries`'s case this happened despite critique itself
+  correctly judging the *draft's* closing as "declarative, not a question. Passes." —
+  `refine_post` overrode a slide critique had explicitly passed, seemingly in an attempt
+  to address a separate, valid complaint ("the real question-work happens only in the
+  caption... thin delivery of the approach on the carousel itself") by pushing an
+  explicit question onto the closing slide instead. The new instruction constrains what
+  critique is told to check; it does not fully constrain what refine does with a
+  complaint that wasn't actually asking for that particular fix.
+- **Anchor-word consistency: held in 4 of 5 refined outputs, one ambiguous case, and one
+  instructive draft-stage catch.** `mindset-boundaries` (AMAE), `career-boundaries`
+  (NEMAWASHI, after refine), `mindset-rest` (UKIGUMO), and `wellness-rest` (NITTAAQTUQ)
+  all have the literal cover headline word reappear in the body text. `career-boundaries`
+  is the clearest confirmation the new instruction is doing real work: its *draft* had
+  the exact mismatch this instruction targets (cover `NINSHITSU`, body `nemawashi`) —
+  critique caught it explicitly by name and refine corrected the cover to `NEMAWASHI` to
+  match. The draft-stage instruction didn't stop the model from drifting once, but the
+  critique/refine safety net caught and fixed it before it reached final output.
+  `relationships-boundaries` is a genuine ambiguous case: the cover headline
+  (`NOLI ME TANGERE`) never literally reappears in the body text in either draft or
+  refined version — the body continues the same Mary Magdalene/garden narrative without
+  restating the Latin phrase itself. Whether that counts as compliant (same anchor,
+  narrative continuity) or a violation (the literal term never recurs) wasn't judged
+  here — flagged for the next review pass.
+
+**Status: still OPEN/EXPERIMENTAL after two real-output review rounds.** The CTA fix is
+confirmed solid; the other three fixes are partial, not complete — critique truncation
+and refine's closing-question override both need a further pass before this can be
+considered settled, and the `relationships-boundaries`-style ambiguous anchor case needs
+an explicit call on what the instruction actually means. Per this project's standing
+logbook-discipline rule, this entry's status must be revisited again once whatever
+happens next (another fix round, or a decision to accept the current partial state) is
+known — it should not be left open indefinitely without a closing update.
+
+### Round 3 — diagnosis before fixing, plus two more fixes and a re-verification
+
+**Diagnosis requested for the closing-question override, done before touching any code.**
+Read `_APPROACH_DEFINITIONS["question_reflection"]` verbatim
+(`generator.py`): *"poses a genuine, specific question the reader is meant to sit with —
+not a rhetorical throwaway — with the post's content oriented around exploring it."*
+**Hypothesis not confirmed** — this contains no instruction to conclude, end, or close on
+a question; it's a content-orientation rule with no opinion on which slide should carry
+it. Read the actual prompts each function sends to find the real mechanism instead of
+guessing: `_CAROUSEL_V1_SPECIFICITY_ACTIONABILITY_SAVEABILITY_INSTRUCTION` — the
+carousel-only override living in the **shared system prompt** that `draft_post`,
+`critique_post`, *and* `refine_post` all read on every call — explicitly says *"A closing
+reflection or an open question is just as valid an ending as a concrete action step."*
+That's a standing instruction framing an open question as a legitimate ending, read by
+`refine_post` directly. Compounding it: round 2's closing-declarative fix was added only
+to `critique_post`'s own task-prompt checklist (a thing for critique to check), never
+restated to `refine_post` as an explicit backstop the way the slide-count rule got one
+(per #29's pattern) — and in both round-2 failures, critique's truncated response never
+even reached that checklist line, so refine had zero explicit "stay declarative" signal
+in either failing case. **No speculative fix applied for this mechanism this round** —
+reported back rather than guessed at, per explicit instruction; the shared system
+prompt's "open question is a valid ending" line is untouched.
+
+**Two further fixes applied, independent of the above diagnosis:**
+
+1. **Critique's carousel `max_tokens` raised 800 → 1200.** Round 2 showed 800 wasn't
+   enough (3 of 5 still truncated). single_image stays at 500, unchanged.
+2. **Carousel checklist tightened, not just given more room.** Consolidated from 8
+   sentences / 963 characters down to 4 sentences (3 `Confirm...` + 1 acceptance
+   clause) / 790 characters — same substantive checks (anchor discipline, tentative-
+   language frequency, direct-address, caption-mirror, closing-declarative,
+   no-forced-takeaway), fewer words spent restating them. Before/after both on record
+   in the code's own history; the tightened version is now what ships.
+3. **Anchor-word carve-out added**, appended to the existing "use the exact same word"
+   sentence in the v1 arc instruction: *"This applies to a single coined term or named
+   concept (e.g. amae, nemawashi). If the anchor is a quote or phrase rather than a
+   single term (e.g. \"Noli me tangere\"), the body doesn't need to restate it verbatim
+   as long as the narrative stays visibly anchored to the same quote/scene throughout."*
+   Directly answers `relationships-boundaries`'s round-2 ambiguous case.
+
+Full backend suite re-run after all changes: **126/126 passing**, no regressions.
+
+**Round 3 re-verification, same 5 real pairs, real Anthropic API:**
+
+- **Critique truncation: fully resolved, 5 of 5.** Every critique now ends on a
+  complete, punctuated sentence — no mid-word or mid-quote cutoffs, a clear
+  improvement over round 2's 2-of-5.
+- **CTA fix: still holding, 5 of 5, more precisely confirmed this round.** Two
+  critiques contained the literal substring "cta" — `mindset-boundaries`'s was "no
+  bossy CTAs" (an unrelated forbidden-list check), and `mindset-rest`'s explicitly said
+  *"Caption CTA line (...) is fixed per instructions, not evaluated"* — i.e. the model
+  itself confirming compliance, not violating it. Zero actual flags of the field.
+- **Closing-declarative: 5 of 5 held this round** (was 3 of 5 in round 2) — no refined
+  closing slide contained a question mark. In every one of the 5, critique's now-
+  complete response explicitly reached and stated a "declarative, compliant" verdict on
+  the closing, and refine respected it every time (in one case, `mindset-rest`,
+  critique instead flagged the closing as reading like a soft command — "Maybe it's
+  time to close the book" — and refine correctly rewrote it to stay declarative
+  without turning it into a question). **Caveat, stated plainly and not oversold:**
+  the underlying mechanism identified in this round's diagnosis (the shared system
+  prompt's "open question is a valid ending" line) was not changed, and round 2's own
+  `mindset-boundaries` failure happened even when critique explicitly passed the
+  closing as declarative — so this round's clean result plausibly reflects critique now
+  always finishing and clearly stating its verdict (rather than truncating before or
+  after the relevant line), not a guaranteed structural fix. Five real runs is not a
+  large enough sample to rule out recurrence.
+- **Anchor-word carve-out: not exercised by this round's sample.** All 5 pairs this
+  round sampled single coined-term anchors (`AMAE`, `PO`, `KEEPER`, `TALLY`, `KEIRO`) —
+  none produced a quote-type anchor like round 2's "Noli me tangere" case, so the new
+  carve-out clause had no real case to prove itself against this round. Confirmed
+  present in the rendered prompt by local check (no API call) before the live run.
+  The underlying "same exact word" rule it's attached to worked precisely as intended
+  in `career-boundaries`: the draft's cover (`KATOMBI`, a fabricated word never used in
+  the body) was caught explicitly by critique's now-complete response ("the cover
+  headline says 'KATOMBI' but the body never uses this word or confirms it... this
+  reads as a factual overreach"), and refine replaced it with a real, verifiable term
+  (`PO`) that the body does use — the check didn't just catch a naming drift, it
+  caught an outright fabrication.
+
+**Status: still OPEN/EXPERIMENTAL — closer, not closed.** Three of four rounds of fixes
+now hold cleanly (CTA, truncation, and — with the caveat above — closing-declarative);
+the anchor carve-out is implemented and locally verified but unexercised by real output
+so far; and the diagnosed root cause of the closing-question override (the shared
+system prompt's own "open question is a valid ending" line) remains unaddressed by
+choice, reported rather than guessed at. Not ready to close the loop yet — worth one
+more round with a larger or targeted sample (specifically forcing a quote-type anchor,
+and/or deciding whether to touch the shared system prompt's ending-flexibility line) before
+this moves to an actual quality read rather than further structural debugging.
+
+### Round 4 — a direct backstop for the closing-declarative rule in `refine_post` itself
+
+**Hardening, same precedent as #29/#37 explicitly:** round 3's diagnosis found the
+closing-question override wasn't caused by `_APPROACH_DEFINITIONS["question_reflection"]`
+(ruled out directly, no instruction to end on a question there) but by two things acting
+together — the shared system prompt's carousel-only line *"A closing reflection or an
+open question is just as valid an ending as a concrete action step,"* read by
+`refine_post` on every call, and the fact that the round-2 closing-declarative fix was
+only ever stated to `critique_post` (as something to check), never to `refine_post`
+directly. The slide-count rule already has exactly this two-layer pattern (a system-
+prompt statement plus a restated backstop in `refine_post`'s own task prompt, from
+#29/#37) — the closing-declarative rule didn't, until now. `refine_post` gained a second,
+independent statement of the rule, carousel-only, verbatim as specified:
+
+> Keep the closing slide declarative — an image or general truth, not a literal question — even if the approach is question_reflection, and regardless of what critique's note does or doesn't say about the closing specifically.
+
+Confirmed locally (prompt-string capture, no API call, `FakeLLM` swallowing the response
+so only the constructed prompt is inspected) before any live call: present verbatim in
+`refine_post`'s rendered prompt for a `Format.CAROUSEL` brief, completely absent for a
+`Format.SINGLE_IMAGE` brief. Full backend suite re-run after the change: **126/126
+passing**, no regressions.
+
+**Live re-verification:** one real `/generate`-pipeline call (`wellness-rest`, chosen
+from the same 5 pairs used throughout this entry) sampled `question_reflection` on the
+first attempt — the only approach this bug ever affected — so the 2-attempt cap wasn't
+needed. Draft closing: *"Boredom isn't empty. It's the only room quiet enough for you to
+hear yourself again."* Critique's verdict, verbatim: *"**Closing slide:** Declarative,
+not a literal question — correct per rules. Good line, earns its place as a lingering
+image/truth rather than advice."* Critique separately flagged the approach as
+under-delivered and suggested sharpening the caption's "I wonder" musing into an actual
+question. Refine's final closing slide: **unchanged**, still *"Boredom isn't empty. It's
+the only room quiet enough for you to hear yourself again."* — declarative, no question
+mark. Refine instead added the suggested question to the **caption** ("When did you last
+let a day mean nothing — no output, no permission slip, no reason you could explain to
+anyone?"), correctly following critique's actual suggestion (sharpen the caption) rather
+than reaching for the closing slide the way it did twice in round 2.
+
+**Status: structurally settled enough to stop touching for now.** All four round-2/3/4
+fixes (CTA, truncation, closing-declarative, anchor-word carve-out) are implemented and
+have each been observed holding in live output at least once, with the closing-
+declarative rule now backed by the same two-layer system-prompt-plus-refine-backstop
+pattern that #29/#37 already proved reliable for the slide-count rule. Still genuinely
+open, not closed outright: sample sizes remain small (this round's confirmation is one
+real run), the anchor carve-out still has zero real quote-type-anchor exercise, and the
+underlying system-prompt line this round's diagnosis identified is still untouched by
+design. But structural debugging has reached a reasonable stopping point — the next
+useful step is the actual quality read this entry has been deferring since round 1, not
+another round of mechanical fixes.
+
+### Round 5 — a second reader-address leak, found by reading the actual prose, not a bug report
+
+**Worth recording explicitly: this one wasn't found by structural testing.** Every prior
+round's findings came from a crash, a truncated response, a literal question mark, or
+some other machine-checkable signal. This one came from directly reading round 1's
+captured `mindset-rest`/`NIKSEN` output line by line: `refine_post` had appended an
+unhedged, direct question — *"What would it take for you to believe that?"* — onto the
+body slide that introduces the anchor (`niksen`) itself, the exact slide the v1 arc
+instruction says should dwell on the anchor alone before any reader-turn. No test in this
+project's suite, and no structural check added in rounds 2–4, would have caught this —
+it required reading the sentence and recognizing that a "you" and a question mark had
+landed somewhere the arc instruction never sanctioned.
+
+**Diagnosis, done before any fix, per standing instruction not to assume:** read
+`_APPROACH_DEFINITIONS["question_reflection"]` (unchanged since round 3 — *"poses a
+genuine, specific question the reader is meant to sit with... with the post's content
+oriented around exploring it"*) and `critique_post`'s approach-fidelity wrapper around it
+(*"Separately check whether the post's structure actually delivers the approach... as
+defined above"*). **Confirmed: neither specifies where in the post that question should
+live.** This is the same underlying ambiguity round 3 diagnosed for the closing-question
+override — just manifesting in a different slide this time, because nothing tells refine
+where the "correct" slide is, only that a question must exist "somewhere."
+
+**Fix, same three-part pattern as the closing-question fix (rounds 2–4), applied to a
+different location this time:**
+
+1. **Arc instruction (system prompt, carousel-only)** — appended, verbatim:
+   > The slide(s) spent dwelling on the anchor alone must contain no reader-address of any kind — no "you," no question, nothing aimed at the reader — full stop. If the approach requires a genuine question somewhere in the post, it belongs in the caption or, at most, the one designated pivot slide later in the carousel, phrased with tentative language, never as a blunt question dropped into the anchor's introduction.
+2. **Critique checklist (carousel-only)** — appended, verbatim:
+   > Confirm no body slide other than the correctly-placed pivot slide addresses the reader directly — via "you" or a posed question — before the anchor's dwelling slides are complete. If question_reflection's required question isn't yet present anywhere in the post, the caption is the correct place for it, not an early body slide.
+3. **`refine_post` backstop (carousel-only, third instance of the #29/#37 two-layer
+   pattern in this entry)** — appended, verbatim:
+   > If you need to add a genuine question to satisfy the question_reflection approach, add it to the caption — not to a body slide that's meant to be dwelling on the anchor alone.
+
+Confirmed locally, all three, before any live call (direct prompt-string capture via a
+`FakeLLM` that swallows the response, no API call): present in the carousel-format
+rendered prompt at each of the three touch points (`_brief_system_prompt`,
+`critique_post`, `refine_post`), completely absent for `Format.SINGLE_IMAGE` in all
+three. Full backend suite re-run: **126/126 passing**, no regressions.
+
+**Live re-verification, one real pair with a real, plainly-reported hiccup along the
+way:** the first live attempt (`mindset-rest`) sampled `question_reflection` immediately,
+but `refine_post` hit the pre-existing, already-documented intermittent JSON-parse
+failure class (logbook #7/#28/#29 — `"Invalid control character at..."`) — reported
+here rather than silently retried, then re-run once on the same pair, which completed
+cleanly. Draft and refined carousel had exactly one body slide (`"In Victorian etiquette
+manuals, women were taught productive idleness — rest had to look like mending, tending,
+waiting on someone."`), **verbatim identical between draft and refined** — zero reader-
+address, no "you," no question mark, untouched by the refine pass. Critique's own
+verdict on it, verbatim: *"slide 2 dwells with the anchor but is the only body slide, and
+it's clean — no reader address, good."* Critique separately flagged the caption's
+existing question as too quickly self-resolved ("reads more like a resolved reflection
+than a live question left open") and asked refine to sharpen it. Refine's rewritten
+caption did exactly that — restructured around *"I wonder how much of that ledger is
+still open. Whether the guilt... whether that guilt is even about the workouts at all...
+Maybe it's just worth sitting with — whose voice that really is, and what it would take
+to stop keeping score"* — genuinely open-ended, phrased as indirect/embedded questions
+("whether...", "what it would take to...") rather than a literal "?" character, which is
+worth noting plainly rather than glossed over: the fix landed the question in the
+correct place (the caption, not the body slide, not the closing), even though the
+specific phrasing this run produced wouldn't trip a naive "does it contain a '?'" check.
+The closing slide (`"Rest was never late. The debt was invented."`) stayed unchanged and
+declarative throughout, confirming round 4's fix is still holding alongside this one.
+
+**Status: still OPEN/EXPERIMENTAL, structural debugging continues to turn up real
+findings on direct review, not just on machine-checkable signals.** This round is a
+concrete argument for reading actual output, not just running structural checks, before
+calling this entry settled — the closing-question and body-slide-question leaks are
+different bugs with the same root ambiguity, found on two separate passes through the
+real text. One real confirmation this round, same small-sample caveat as every prior
+round. Worth at least one more pass specifically hunting for a third location the
+question could leak to (a mid-carousel pivot slide getting an unhedged, un-tentative
+question, for instance) before concluding the underlying approach-fidelity ambiguity is
+fully contained rather than just found in two of however many places it could surface.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -1769,3 +2202,4 @@ extraction has to be wired into the live generation path rather than read back f
 | 30 | `voice_samples.direct` rewritten to be domain-diverse instead of the originally "Locked" (blueprint Section 4) workplace-themed 5 samples | Live-repro-confirmed as the dominant driver of content drift (accepted angles pivoting to invented office/meeting scenarios) — the locked value was actively working against the product's own quality goal |
 | 32 | Masthead shows only `masthead_short` ("WGS") — the `{category} NO. {n}` text and its rule/separator, specified in blueprint Section 12, are no longer rendered | Explicit request to simplify what she sees on every slide; backend computation is untouched, so this is reversible in one file |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
+| 39 | **OPEN/EXPERIMENTAL, 5 real-output review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; round 5, found by direct prose review rather than structural testing, fixed a second reader-address leak — refine dropping an unhedged question into the anchor-introduction body slide, same root ambiguity (approach-fidelity naming no location for its required question) as the closing-question bug, same #29/#37 two-layer fix pattern applied to a new location | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; two separate reader-address leaks now fixed via the same pattern — still not formally closed, worth checking for a third leak location before the deferred quality read |

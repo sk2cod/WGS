@@ -173,6 +173,86 @@ _CAPTION_INSTRUCTION = (
     "is never where the only copy of the substance lives."
 )
 
+# --- Carousel-only "v1" content-voice experiment (logbook #39) ---
+# Replaces _SPECIFICITY_INSTRUCTION / _ACTIONABILITY_INSTRUCTION /
+# _SAVEABILITY_INSTRUCTION / _CAPTION_INSTRUCTION above, but ONLY when
+# brief.format == Format.CAROUSEL — single_image keeps every instruction above
+# verbatim, unchanged. Experimental, pending real-output review before this either
+# expands past carousel or gets promoted out of "v1" — see logbook #39.
+_CAROUSEL_V1_ARC_INSTRUCTION = (
+    "This post is one micro-essay, not a list of related points. Every slide stays "
+    "with a single anchor — one concrete, real, specific thing drawn from history, "
+    "culture, another language, nature, or literature: a tradition, a custom, an "
+    "etymology, a philosophical idea, a moment from someone's real life. Favor an "
+    "anchor that carries its own specific word or phrase from another era, culture, "
+    "or discipline when one genuinely fits — this is what gives the post its "
+    "editorial, researched feel, not generic inspiration. Never introduce a second, "
+    "unrelated example partway through. Deepen the one you opened with instead of "
+    "moving to a new one.\n\n"
+    "Open on the anchor itself, named plainly, by slide 1 or 2 — concrete "
+    "scene-setting is fine, abstract framing is not. Spend a slide or two with the "
+    "anchor alone, on its own terms, before turning to the reader at all. Make one "
+    "or two turns toward the reader or the human condition, no more, each carried "
+    "by a tentative word — \"I wonder,\" \"perhaps,\" \"maybe,\" \"somewhere along "
+    "the way.\" Do not let this language become the default register of every "
+    "slide. Once a turn has landed, the following line can state the reframe more "
+    "plainly again. Close on an image or a general truth that lingers — never "
+    "advice, never an instruction, never a command aimed at \"you.\" Let the "
+    "reader draw the connection to their own life themselves.\n\n"
+    "Biographical or factual specifics that aren't independently verifiable get a "
+    "soft hedge (\"seemed to,\" \"known for\") rather than being stated as flat "
+    "fact.\n\n"
+    "Write in plain, declarative sentences everywhere except the one or two pivot "
+    "points."
+    "\n\n"
+    # Appended after logbook #39's first real-output review round: critique reliably
+    # (mis)flagged the cover's reader-facing kicker as a premature "turn to the
+    # reader," and the model itself twice invented a second name for the same
+    # anchor between the cover headline and the body.
+    "The \"dwell with the anchor alone before turning to the reader\" rule applies "
+    "to the body slides. The cover's kicker may still gesture toward the reader as "
+    "its own hook — that is its separate, established job and is not a violation. "
+    "If the anchor has a specific name or term, use that exact same word on the "
+    "cover headline as when it's introduced in the body — don't invent a second "
+    "name for the same anchor."
+    "\n\n"
+    # Appended in logbook #39's round-3 review: the "exact same word" rule above
+    # was written with single coined terms in mind and doesn't cleanly fit a
+    # quote-type anchor, where the body naturally continues the scene/narrative
+    # rather than re-quoting the phrase itself.
+    "This applies to a single coined term or named concept (e.g. amae, nemawashi). "
+    "If the anchor is a quote or phrase rather than a single term (e.g. \"Noli me "
+    "tangere\"), the body doesn't need to restate it verbatim as long as the "
+    "narrative stays visibly anchored to the same quote/scene throughout."
+    "\n\n"
+    # Appended in logbook #39's round-5 review, found via direct prose review (not a
+    # structural bug report): refine was inserting an unhedged, direct question into
+    # the anchor-introduction body slide itself — the slide meant to dwell on the
+    # anchor alone — to satisfy question_reflection's approach-fidelity check, which
+    # names no location for that question. A different failure mode than the closing-
+    # question override fixed in round 4: an early body slide, not the closing, and
+    # not hedged as a tentative pivot at all.
+    "The slide(s) spent dwelling on the anchor alone must contain no reader-address "
+    "of any kind — no \"you,\" no question, nothing aimed at the reader — full stop. "
+    "If the approach requires a genuine question somewhere in the post, it belongs "
+    "in the caption or, at most, the one designated pivot slide later in the "
+    "carousel, phrased with tentative language, never as a blunt question dropped "
+    "into the anchor's introduction."
+)
+
+_CAROUSEL_V1_CAPTION_INSTRUCTION = (
+    "The caption mirrors the whole post's arc in prose — the same anchor, the same "
+    "movement from observation to reframe. It is a second, complete telling of the "
+    "same micro-essay, not a summary, teaser, or restatement."
+)
+
+_CAROUSEL_V1_SPECIFICITY_ACTIONABILITY_SAVEABILITY_INSTRUCTION = (
+    "This post does not need to give the reader something to do. A closing "
+    "reflection or an open question is just as valid an ending as a concrete "
+    "action step. Do not force advice or a takeaway if the anchor's reframe "
+    "doesn't call for one."
+)
+
 
 def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
     """Deterministic role sequence for this brief — the only place slide shape is
@@ -287,6 +367,22 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
 
     kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
 
+    # Carousel-only "v1" content-voice experiment (logbook #39) — single_image takes
+    # the else branch, completely unchanged from before this experiment existed.
+    if brief.format == Format.CAROUSEL:
+        content_quality_block = (
+            f"{_CAROUSEL_V1_ARC_INSTRUCTION}\n\n"
+            f"{_CAROUSEL_V1_SPECIFICITY_ACTIONABILITY_SAVEABILITY_INSTRUCTION}\n\n"
+            f"{_CAROUSEL_V1_CAPTION_INSTRUCTION}"
+        )
+    else:
+        content_quality_block = (
+            f"{_SPECIFICITY_INSTRUCTION}\n\n"
+            f"{_ACTIONABILITY_INSTRUCTION}\n\n"
+            f"{_SAVEABILITY_INSTRUCTION}\n\n"
+            f"{_CAPTION_INSTRUCTION}"
+        )
+
     return (
         f"You write Instagram content for {brand_kit.brand_name}, a page for "
         f"{brand_kit.audience} Niche: {brand_kit.niche}\n\n"
@@ -296,10 +392,7 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
         "would apply equally to anyone is not acceptable; the gendered dimension "
         "must be visible in the actual text.\n\n"
         f"{_VOICE_INSTRUCTION}\n\n"
-        f"{_SPECIFICITY_INSTRUCTION}\n\n"
-        f"{_ACTIONABILITY_INSTRUCTION}\n\n"
-        f"{_SAVEABILITY_INSTRUCTION}\n\n"
-        f"{_CAPTION_INSTRUCTION}\n\n"
+        f"{content_quality_block}\n\n"
         f"Brand voice traits: {', '.join(brand_kit.voice_traits)}\n"
         f"Voice examples in the register for this post:\n{voice_lines}\n\n"
         f"Never use: {forbidden}\n"
@@ -395,32 +488,89 @@ def critique_post(
         "Separately check whether it reads as active-voice, direct-address, "
         "peer-to-peer speech rather than polished copywriting or a lecture. "
     )
-    specificity_instruction = (
-        "Separately check whether the point is illustrated with a concrete, "
-        "everyday moment or real scene rather than left as an abstract statement "
-        "of a principle. "
-    )
-    actionability_instruction = (
-        "Separately check whether it leaves her with something she can actually "
-        "do — a specific next step, phrase, or behavior shift — not only insight "
-        "or validation. "
-    )
-    saveability_instruction = (
-        "Separately judge whether the topic and angle naturally had room for a "
-        "concrete, reusable takeaway (an exact phrase, a specific reframe, a short "
-        "mental model) and the draft missed it — only flag this if the opportunity "
-        "was genuinely there; do not ask for one to be manufactured on a purely "
-        "relatable or feeling-oriented post that doesn't call for it. "
+    # Carousel-only "v1" content-voice experiment (logbook #39): replaces the three
+    # checks below with a single connected-narrative checklist. single_image takes
+    # the else branch, completely unchanged from before this experiment existed.
+    if brief.format == Format.CAROUSEL:
+        # Tightened in logbook #39's round-3 review: same substantive checks as
+        # before, consolidated from 8 sentences into 4 so critique has less ground
+        # to cover per call, on top of round 2's max_tokens increase (below).
+        content_quality_instruction = (
+            "Confirm one anchor holds the whole carousel — a second, unrelated "
+            "example is only a problem if it appears after slide 1 — and that it's "
+            "named plainly by slide 1 or 2, before any body slide turns to the "
+            "reader. "
+            "Confirm tentative language (\"I wonder,\" \"perhaps,\" and similar) "
+            "appears at most once or twice, and no slide gives the reader a direct "
+            "instruction or command. "
+            "Confirm the caption is a full second telling of the arc, not a hook, "
+            "teaser, or summary, and that the closing slide is declarative, not a "
+            "literal question — even for question_reflection, which only needs a "
+            "genuine open question somewhere in the arc, not on the closing line "
+            "itself. "
+            "A closing reflection or open question elsewhere, with no forced action "
+            "step, is acceptable and should not be flagged as a missing takeaway. "
+            # Appended in logbook #39's round-5 review: same ambiguity that caused
+            # round 2's closing-question override (approach-fidelity naming no
+            # location for the required question) was separately letting refine drop
+            # an unhedged question into the anchor-introduction body slide instead —
+            # found via direct prose review of round 1's mindset-rest/NIKSEN output.
+            "Confirm no body slide other than the correctly-placed pivot slide "
+            "addresses the reader directly — via \"you\" or a posed question — "
+            "before the anchor's dwelling slides are complete. If "
+            "question_reflection's required question isn't yet present anywhere in "
+            "the post, the caption is the correct place for it, not an early body "
+            "slide. "
+        )
+    else:
+        specificity_instruction = (
+            "Separately check whether the point is illustrated with a concrete, "
+            "everyday moment or real scene rather than left as an abstract statement "
+            "of a principle. "
+        )
+        actionability_instruction = (
+            "Separately check whether it leaves her with something she can actually "
+            "do — a specific next step, phrase, or behavior shift — not only insight "
+            "or validation. "
+        )
+        saveability_instruction = (
+            "Separately judge whether the topic and angle naturally had room for a "
+            "concrete, reusable takeaway (an exact phrase, a specific reframe, a short "
+            "mental model) and the draft missed it — only flag this if the opportunity "
+            "was genuinely there; do not ask for one to be manufactured on a purely "
+            "relatable or feeling-oriented post that doesn't call for it. "
+        )
+        content_quality_instruction = (
+            f"{specificity_instruction}{actionability_instruction}{saveability_instruction}"
+        )
+    # Added after logbook #39's first real-output review round, unconditionally for
+    # both formats: ClosingSlide.cta is hardcoded from brand_kit.signature_cta in
+    # _build_slide() and is never model output, so critique spending part of its
+    # limited token budget flagging it (3 of 5 real carousel runs) was pure waste —
+    # refine has no way to act on that feedback regardless of format.
+    cta_instruction = (
+        "Do not evaluate or flag the closing slide's cta field. It is a fixed brand "
+        "value from brand_kit.signature_cta, not model-generated, and cannot be "
+        "changed by refine. "
     )
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         "Critique it against the brand voice, the forbidden list, tone, word limits, and "
         f"whether it reads as specific rather than generic. {citation_instruction}"
         f"{shape_instruction}{kicker_instruction}{approach_instruction}{voice_instruction}"
-        f"{specificity_instruction}{actionability_instruction}{saveability_instruction}"
+        f"{content_quality_instruction}{cta_instruction}"
         "Be concrete and short — list only real problems, or say 'no changes needed'."
     )
-    return llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=500)
+    # Carousel's checklist replaced 3 short checks with one longer one (#39), grew
+    # further in round 2 (closing-declarative check), then got tightened back down in
+    # round 3 (above) — but 800 tokens still truncated 3 of 5 real carousel critiques
+    # in round 2, so this round also raises the ceiling to 1200 on top of the
+    # tightened text, rather than relying on either change alone. single_image's
+    # critique prompt only gained the short, exclusionary cta_instruction, which asks
+    # the model to skip a check rather than perform an additional one, so its output
+    # length isn't expected to grow — left at 500, unchanged.
+    critique_max_tokens = 1200 if brief.format == Format.CAROUSEL else 500
+    return llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=critique_max_tokens)
 
 
 def refine_post(
@@ -439,6 +589,36 @@ def refine_post(
     # structure was needed — so the constraint isn't reliably strong enough stated
     # only once, in the system prompt. Restating it here, at the exact point the
     # model is told to "apply the critique," is the second layer.
+    # Second backstop, same #29/#37 precedent as above, added in logbook #39's round
+    # 4: round 3's diagnosis traced the closing-question override to the shared
+    # system prompt's "an open question is just as valid an ending" line (read by
+    # refine_post directly) plus a round-2 fix that only ever told critique to check
+    # for a declarative closing, never refine_post to keep one — so, exactly like the
+    # slide-count rule above, the constraint gets restated here a second time, at the
+    # exact point the model applies the critique, independent of whether critique's
+    # own note happened to mention the closing at all. Carousel-only: single_image
+    # has no carousel_closing role for this to apply to.
+    closing_declarative_instruction = (
+        "\n\nKeep the closing slide declarative — an image or general truth, not a "
+        "literal question — even if the approach is question_reflection, and "
+        "regardless of what critique's note does or doesn't say about the closing "
+        "specifically."
+        if brief.format == Format.CAROUSEL
+        else ""
+    )
+    # Third backstop, same #29/#37 precedent, added in logbook #39's round 5: the
+    # question_reflection approach-fidelity check names no location for its required
+    # question, and round-1 evidence (mindset-rest/NIKSEN, found by direct prose
+    # review) showed refine dropping it into the anchor-introduction body slide
+    # instead of the closing — a different location than round 4's fix covers, same
+    # underlying ambiguity. Carousel-only, same reasoning as the backstop above.
+    body_slide_question_instruction = (
+        "\n\nIf you need to add a genuine question to satisfy the question_reflection "
+        "approach, add it to the caption — not to a body slide that's meant to be "
+        "dwelling on the anchor alone."
+        if brief.format == Format.CAROUSEL
+        else ""
+    )
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         f"Critique:\n{critique}\n\n"
@@ -450,6 +630,8 @@ def refine_post(
         "the post needs more slides, fewer slides, or a different structure, keep "
         "the exact same number and type of slides as the draft and only change the "
         "content of those slides."
+        f"{closing_declarative_instruction}"
+        f"{body_slide_question_instruction}"
     )
     raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=1500)
     return _parse_post(raw, roles, brand_kit)

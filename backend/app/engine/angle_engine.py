@@ -15,6 +15,7 @@ from app.models.topic import Topic
 from app.providers.llm import LLMProvider, strip_json_fence
 from app.taxonomy.approaches import (
     APPROACHES,
+    CAROUSEL_V1_APPROACHES,
     SINGLE_IMAGE_QUOTE_APPROACHES,
     SINGLE_IMAGE_SAFE_APPROACHES,
     SINGLE_IMAGE_STAT_APPROACHES,
@@ -64,7 +65,13 @@ def sample_cell(
     `single_image_style` further narrows the single_image pool to just the quote-style
     or stat-style half (logbook #28) when she's chosen "Poetic Quote"/"Quick Stat" up
     front — ignored unless format is single_image; leaving it unset preserves today's
-    behavior of sampling from the full 4-approach safe pool."""
+    behavior of sampling from the full 4-approach safe pool.
+
+    `format=Format.CAROUSEL` restricts the pool to CAROUSEL_V1_APPROACHES (story,
+    question_reflection) — the carousel-only "v1" content-voice experiment (logbook
+    #39). Experimental, pending real-output review. single_image's behavior above is
+    completely unaffected by this branch; `format=None` (the daily-picks pitch path,
+    where no format has been chosen yet) still samples the full, unrestricted pool."""
     rng = rng or random.Random()
     used_fingerprints = {r.fingerprint for r in memory if r.topic_id == topic.id}
 
@@ -75,6 +82,8 @@ def sample_cell(
             allowed_approaches = SINGLE_IMAGE_STAT_APPROACHES
         else:
             allowed_approaches = SINGLE_IMAGE_SAFE_APPROACHES
+    elif format == Format.CAROUSEL:
+        allowed_approaches = CAROUSEL_V1_APPROACHES
     else:
         allowed_approaches = APPROACHES
 
