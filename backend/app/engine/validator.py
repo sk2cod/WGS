@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.engine.generator import _citation_mode, slide_text
+from app.engine.generator import _citation_mode, _tolerant_word_cap, slide_text
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief
+from app.models.enums import Format
 from app.models.memory import MemoryRecord
 from app.models.post import GeneratedPost
 
@@ -33,15 +34,26 @@ def _check_forbidden(brand_kit: BrandKit, post: GeneratedPost) -> list[str]:
 
 
 def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
+    """logbook #39, round 8 correction: carousel's word cap now allows the same
+    10% tolerance the model is actually told about (system prompt + critique,
+    generator.py::_tolerant_word_cap) -- without this, a slide the model
+    believed was compliant could still trip the app's "Needs a look" banner,
+    the visible warning and the model's real instruction disagreeing.
+    single_image keeps the original, untolerant cap unchanged."""
     errors = []
     if len(post.slides) != brief.slide_count:
         errors.append(f"expected {brief.slide_count} slide(s), got {len(post.slides)}")
+    effective_cap = (
+        _tolerant_word_cap(brief.max_words_per_slide)
+        if brief.format == Format.CAROUSEL
+        else brief.max_words_per_slide
+    )
     for i, slide in enumerate(post.slides, start=1):
         word_count = len(slide_text(slide).split())
-        if word_count > brief.max_words_per_slide:
+        if word_count > effective_cap:
             errors.append(
                 f"slide {i} has {word_count} words, exceeds max_words_per_slide "
-                f"({brief.max_words_per_slide})"
+                f"({effective_cap})"
             )
     return errors
 

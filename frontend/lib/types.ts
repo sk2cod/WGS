@@ -80,21 +80,27 @@ export interface CarouselBodyTeachingContent {
   body: string;
 }
 
+/** cta/handle moved to CarouselConversationContent in logbook #39 round 8 —
+ * they were landing here as a leftover from before round 7 made
+ * carousel_conversation the true last slide. signature stays but is no
+ * longer rendered by CarouselClosing.tsx (display-only removal, #32's
+ * pattern — the backend value is unchanged, only the frontend stops drawing it). */
 export interface CarouselClosingContent {
   takeaway: string;
   signature: string;
-  cta: string;
-  handle: string; // full @handle, spelled out only here (Section 12)
 }
 
 /** The real CTA/question slide (logbook #39, round 7) — the first structural,
- * not prompt-only, change in the v1 line of work. label and invite are fixed
- * brand copy, not model-generated (same pattern as CarouselClosingContent's
- * signature/cta/handle) — only question is ever asked of the model. */
+ * not prompt-only, change in the v1 line of work. label, invite, cta, and
+ * handle are all fixed brand copy, not model-generated — only question is
+ * ever asked of the model. cta/handle moved here from CarouselClosingContent
+ * in round 8 (this is the true last slide, they belong here). */
 export interface CarouselConversationContent {
   label: string;
   question: string;
   invite: string;
+  cta: string;
+  handle: string; // full @handle, spelled out only here (Section 12)
 }
 
 export interface SingleQuoteContent {

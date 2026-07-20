@@ -2359,6 +2359,129 @@ after the fix: **127/127 passing**. `npx tsc --noEmit`: clean.
 **Not a blueprint deviation beyond what round 7 itself already is** — this is a bug
 fix within the same structural addition, not a new design decision.
 
+### Round 8 — 3 body slides, "with you," removal, follow-us relocation, anti-padding/split guidance, word tolerance
+
+**Five confirmed, decided changes, not new findings from testing.** Unlike most
+prior rounds, these came in as direct instructions rather than something surfaced
+by a test batch or organic use — implementation and local verification only, same
+discipline as every other round: no `/generate` calls, real testing happens live
+afterward.
+
+**1. Body slides raised 1–2 → 3, fixed regardless of approach.** Confirmed final
+shape: cover, body, body, body, closing, conversation — 6 slides total.
+`slide_roles_for()`'s body count is no longer derived from `brief.slide_count`
+(`max(n-3, 0)`, varying 1–2) — it's now a flat `3`. This collapsed
+`brief_builder.py`'s `_default_slide_count` (previously 5/4, conditional on
+`TEACHING_BODY_APPROACHES`) to a flat `6` for every carousel approach — the body
+*role* (`carousel_body_teaching` vs `carousel_body`) still varies by approach,
+just always 3 of it now. `paste_link.py`'s `_SLIDE_COUNT[CAROUSEL]` bumped
+4 → 6 to match, same reasoning as round 7's 3 → 4.
+
+**2. "with you," removed from the closing slide.** Investigated first, as asked:
+`ClosingSlide.signature` defaults to `"with you,"` in the Pydantic model itself
+and is also passed as that literal string explicitly in `_build_slide()` —
+**hardcoded, not a `brand_kit` field.** (`cta`/`handle`, by contrast, *were*
+real `brand_kit.signature_cta`/`brand_kit.handle` fields — see #3.) Since there's
+no underlying brand_kit data to preserve, the closest equivalent to "don't delete
+backend data, mirror #32's display-only pattern" is: the `signature` field stays
+on `ClosingSlide` and `_build_slide()` still computes it exactly as before —
+`CarouselClosing.tsx` simply stopped rendering it. Verified via a real
+`/api/render` call: clean render, masthead + takeaway only, no layout gap — the
+`flex: 1; justify-content: center` wrapper re-centers correctly around fewer
+children with no code change needed there.
+
+**3. "Follow us..." / `@womensgrowthsociety` relocated from `ClosingSlide` to
+`ConversationSlide`.** Investigated first: `cta` (`brand_kit.signature_cta`) and
+`handle` (`brand_kit.handle`) **are** real `brand_kit` fields — genuinely
+misplaced, not display noise. They were still landing on `ClosingSlide` because
+that was the true last slide before round 7 added `carousel_conversation` after
+it; nobody had moved them. Fixed as a real relocation, not a duplicate/display-only
+change (unlike #2): removed `cta`/`handle` from `ClosingSlide` (Pydantic model,
+`models/post.py`) and added them to `ConversationSlide`, populated in
+`_build_slide()`'s `carousel_conversation` branch exactly as `carousel_closing`'s
+branch used to. Frontend mirrored the same move — `CarouselClosingContent`/
+`CarouselConversationContent` (`lib/types.ts`), `CarouselClosing.tsx` (stopped
+rendering them), `ConversationSlide.tsx` (renders `cta` then `handle` after
+`invite`, same typographic treatment — body-copy-weight sentence, tiny
+letter-spaced uppercase footnote — the original `CarouselClosing.tsx` used).
+Verified via real `/api/render` calls on both templates (shown above and below)
+— closing shows only masthead + takeaway, nothing orphaned; conversation shows
+label, question, invite, cta, and handle in one uncrowded, readable stack.
+
+**4. Anti-padding + split guidance**, appended to the carousel arc instruction —
+**adapted from a proven pattern found by auditing a separate project's carousel
+mechanism, not invented fresh for this one**:
+> You have three body slides — use as many as the content genuinely needs, but do not pad to fill all three, and do not force one idea across multiple slides just to use the space available. If a single slide's content has more than one distinct fact or beat genuinely competing for room — especially when a reframe depends on a contrast between two things — split it across two slides rather than compressing both into one. Each body slide should do one clear job.
+
+This is a direct answer to raising body slides to 3 (#1): nothing about the count
+change itself stops the model from padding thin content across all three, so this
+guidance is what's actually meant to prevent that, not the count.
+
+**5. 10% word-budget tolerance**, added to both the system prompt's stated cap and
+critique's own enforcement of it, unconditionally for both formats (not
+carousel-only, unlike #1/#4) — a real near-miss (37 vs. 30 words) during earlier
+testing showed a hard cap with zero tolerance treats a trivial overage as the same
+defect as a genuinely bloated slide. New `_tolerant_word_cap()` helper
+(`math.ceil(cap * 1.1)`) computes the buffer once, shared by both call sites:
+`_brief_system_prompt()`'s stated cap line now reads target + "with up to 10%
+over ({tolerant_cap}) as an acceptable buffer, not a hard wall"; `critique_post()`
+gained a dedicated `word_tolerance_instruction` restating the same tolerant number
+directly, not just relying on the shared system prompt reaching critique
+indirectly. **Deliberately out of scope: `validator.py`'s deterministic
+`_check_format` word-count check is unchanged** — it's a hard check against the
+original (non-tolerant) cap, per the literal instruction ("system prompt's stated
+cap and critique's enforcement of it," not the Python validator). Flagged
+explicitly rather than silently expanding scope: this means a slide within the
+new LLM-facing buffer (e.g. 32 words on a 30-word cap) could still produce a
+`validation_errors` entry in the app UI even though neither the system prompt nor
+critique would treat it as a defect — a real, known inconsistency between what the
+model is told and what the deterministic checker enforces, left for a separate
+decision rather than assumed to be in scope here.
+
+**Local verification (no `/generate` calls, as instructed):**
+- Local prompt-string capture (no API calls): `slide_roles_for()` confirmed
+  returning 3 body slides; anti-padding/split guidance present in the carousel
+  system prompt, absent from single_image; the tolerant word cap (33, for the
+  default 30-word target) present in **both** carousel and single_image system
+  prompts (deliberately universal, not gated); critique's word-tolerance
+  instruction and its updated (conversation-slide, not closing-slide)
+  `cta_instruction` both confirmed present.
+- Real `/api/render` calls for the modified `carousel_closing` and
+  `carousel_conversation` templates — both `200`, both visually inspected
+  (screenshots captured this session): closing clean with no orphaned gap,
+  conversation showing all five of its fields (label, question, invite, cta,
+  handle) without crowding.
+- **22 more tests needed updating**, the same kind of mechanical, necessary
+  consequence round 7's slide-count change required — `test_generator.py`,
+  `test_brief_builder.py`, `test_paste_link.py`, `test_validator.py`, and
+  `test_generate_route_http.py` all had hardcoded slide counts, role lists, or
+  fixture JSON shaped for the old 1–2-body/cta-on-closing shape. Full backend
+  suite after all fixes: **127/127 passing**. `npx tsc --noEmit`: clean.
+
+**Status: still OPEN/EXPERIMENTAL.** Slide count is now 6 total (was 4 after round
+7, 3 before that) — this round changed *shape* again on top of round 7's
+first-ever structural change, not just prompt wording. Next verification step is
+live, organic use, same as declared after round 6 — not another CC-driven round.
+
+**Correction, same round, caught immediately after landing:** point 5's 10%
+word-budget tolerance was applied **universally to both formats by mistake** —
+inconsistent with every other v1 change in this entry, all of which are
+carousel-only. Fixed in the same round: `_brief_system_prompt()`'s word-cap line
+and `critique_post()`'s `word_tolerance_instruction` are now both gated on
+`brief.format == Format.CAROUSEL`; single_image reverts to the original,
+untolerant cap in both places, unchanged from before round 8. Separately,
+`validator.py::_check_format` — the deterministic Python check actually driving
+the app's "Needs a look" warning banner, not touched at all in the first pass of
+round 8 — was brought into alignment with the same carousel-only tolerance, so
+the visible warning and what the model is actually told now agree: a carousel
+slide at 33 words (the tolerant cap for a 30-word target) no longer trips a
+validation error the model was never told was a problem, while single_image's
+check stays exactly as strict as it always was. Verified directly at the
+boundary, not just by re-running the suite: carousel at 33 words → no error,
+34 words → flagged (message now shows the effective 33-word cap, not the bare
+30); single_image at 30 words → no error, 31 words → flagged (unchanged
+behavior). Full backend suite: **127/127 passing**, no test changes needed.
+
 ---
 
 ## Summary — deviations from the original design docs
@@ -2374,4 +2497,4 @@ fix within the same structural addition, not a new design decision.
 | 30 | `voice_samples.direct` rewritten to be domain-diverse instead of the originally "Locked" (blueprint Section 4) workplace-themed 5 samples | Live-repro-confirmed as the dominant driver of content drift (accepted angles pivoting to invented office/meeting scenarios) — the locked value was actively working against the product's own quality goal |
 | 32 | Masthead shows only `masthead_short` ("WGS") — the `{category} NO. {n}` text and its rule/separator, specified in blueprint Section 12, are no longer rendered | Explicit request to simplify what she sees on every slide; backend computation is untouched, so this is reversible in one file |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
-| 39 | **OPEN/EXPERIMENTAL, 7 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues found via prose review and real organic use; round 7 added a real new `carousel_conversation` slide (CTA/question, matching the locked v1 reference) — the line's first **structural**, not prompt-only, change, bumping carousel's slide count for the first time (4–5, not 3–4); a real render-time glyph gap (label's emoji had no glyph in the locked font set, nor did 3 other Unicode alternatives tried) found and fixed same-round, verified against the actual font files, landing on a plain ASCII hyphen | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; round 7 is implementation/local-verification only, not yet run through a real `/generate` call |
+| 39 | **OPEN/EXPERIMENTAL, 8 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues; round 7 added a real `carousel_conversation` slide (first structural, not prompt-only, change) and fixed a render-time emoji glyph gap; round 8 raised body slides 1–2 → 3 (6 slides total now, fixed regardless of approach), removed the hardcoded "with you," from display, relocated the real `brand_kit`-driven follow-us/handle line from the closing slide to the conversation slide (the true last slide as of round 7), added anti-padding/split guidance (adapted from an audited pattern in another project) and a 10% word-budget tolerance, corrected same-round to be carousel-only (was briefly universal by mistake) and extended to `validator.py` so the app's own warning banner agrees with what the model is told | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; all rounds implementation/local-verification only so far, none yet run through a real `/generate` call |

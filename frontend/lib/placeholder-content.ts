@@ -36,23 +36,26 @@ export const PLACEHOLDER_BODY_TEACHING: CarouselBodyTeachingContent = {
   body: "Waiting for confidence before you speak up is backwards — the confidence shows up after you've done the uncomfortable thing a few times, not before.",
 };
 
+// cta/handle moved to PLACEHOLDER_CONVERSATION in round 8 -- CarouselClosing
+// no longer renders them (signature also no longer rendered, display-only).
 export const PLACEHOLDER_CLOSING: CarouselClosingContent = {
   takeaway: "You don't have to shrink to keep the peace.",
   signature: "with you,",
-  cta: WGS_BRAND_KIT.signature_cta ?? "",
-  handle: WGS_BRAND_KIT.handle,
 };
 
 // logbook #39, round 7 -- label/invite are fixed brand copy, only question is
-// ever asked of the model (same pattern as PLACEHOLDER_CLOSING's cta/handle).
-// label originally led with an emoji; verified via real Satori renders that
-// this project's bundled Inter TTF has no glyph for it (nor for em dash,
-// middot, or hedera/star alternatives tried) -- plain ASCII hyphen confirmed
-// rendering cleanly instead (logbook #39, glyph fix).
+// ever asked of the model. label originally led with an emoji; verified via
+// real Satori renders that this project's bundled Inter TTF has no glyph for
+// it (nor for em dash, middot, or hedera/star alternatives tried) -- plain
+// ASCII hyphen confirmed rendering cleanly instead (logbook #39, glyph fix).
+// cta/handle added in round 8, moved here from PLACEHOLDER_CLOSING (the true
+// last slide as of round 7, where they belong).
 export const PLACEHOLDER_CONVERSATION: CarouselConversationContent = {
   label: "- Conversation for today",
   question: "What's one thing you're finally letting yourself put down?",
   invite: "I'd love to hear it.",
+  cta: WGS_BRAND_KIT.signature_cta ?? "",
+  handle: WGS_BRAND_KIT.handle,
 };
 
 export const PLACEHOLDER_QUOTE: SingleQuoteContent = {

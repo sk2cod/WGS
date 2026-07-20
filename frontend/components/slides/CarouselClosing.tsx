@@ -12,15 +12,13 @@ interface CarouselClosingProps extends CarouselClosingContent {
  * top in normal flow; everything else lives in its own flex:1 wrapper that
  * centers *within itself* — justify-content must never land on the whole
  * slide here, or it drags the masthead down with it.
+ *
+ * logbook #39, round 8: only takeaway renders now. signature/cta/handle were
+ * removed from display (signature — display-only, #32's pattern, the field
+ * still flows from the backend unchanged) or relocated to ConversationSlide
+ * (cta/handle — the true last slide as of round 7, where they belong).
  */
-export default function CarouselClosing({
-  masthead,
-  tokens,
-  takeaway,
-  signature,
-  cta,
-  handle,
-}: CarouselClosingProps) {
+export default function CarouselClosing({ masthead, tokens, takeaway }: CarouselClosingProps) {
   const onPrimary = tokens.secondary;
 
   return (
@@ -33,7 +31,6 @@ export default function CarouselClosing({
           flex: 1,
           flexDirection: "column",
           justifyContent: "center",
-          gap: 28,
         }}
       >
         <span
@@ -46,39 +43,6 @@ export default function CarouselClosing({
           }}
         >
           {takeaway}
-        </span>
-        <span
-          style={{
-            fontFamily: tokens.font_script,
-            fontSize: 56,
-            color: onPrimary,
-          }}
-        >
-          {signature}
-        </span>
-        <span
-          style={{
-            fontFamily: tokens.font_body,
-            fontWeight: 400,
-            fontSize: 30,
-            lineHeight: 1.4,
-            color: onPrimary,
-          }}
-        >
-          {cta}
-        </span>
-        <span
-          style={{
-            fontFamily: tokens.font_body,
-            fontWeight: 600,
-            fontSize: 18,
-            letterSpacing: 3,
-            textTransform: "uppercase",
-            color: onPrimary,
-            opacity: 0.65,
-          }}
-        >
-          {handle}
         </span>
       </div>
     </SlideFrame>

@@ -19,10 +19,11 @@ from app.models.memory import MemoryRecord, next_masthead_number
 from app.providers.llm import LLMProvider, strip_json_fence
 from app.taxonomy.voice_register import APPROACH_REGISTER
 
-# Carousel bumped 3 -> 4 for carousel_conversation (logbook #39, round 7) —
-# appended after closing for every carousel brief regardless of approach,
-# including paste-link's default stat_research (non-teaching, non-body-count).
-_SLIDE_COUNT = {Format.CAROUSEL: 4, Format.SINGLE_IMAGE: 1}
+# Carousel bumped 3 -> 4 for carousel_conversation (logbook #39, round 7), then
+# 4 -> 6 when body slides went 1 -> 3, fixed regardless of approach (logbook
+# #39, round 8) — cover + 3 body + closing + conversation, for every carousel
+# brief including paste-link's default stat_research.
+_SLIDE_COUNT = {Format.CAROUSEL: 6, Format.SINGLE_IMAGE: 1}
 
 
 class PasteLinkError(Exception):

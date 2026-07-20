@@ -43,20 +43,28 @@ class BodyTeachingSlide(BaseModel):
 
 
 class ClosingSlide(BaseModel):
+    """logbook #39, round 8: cta/handle moved to ConversationSlide, the true
+    last slide as of round 7 — they were still landing here as a leftover from
+    before ConversationSlide existed. signature ("with you,") stays a real,
+    computed field (hardcoded in _build_slide, never brand_kit-driven) but is
+    no longer rendered by the frontend template — display-only removal, same
+    pattern as #32's masthead simplification: the backend value is unchanged,
+    only CarouselClosing.tsx stops drawing it."""
+
     template_id: Literal["carousel_closing"] = "carousel_closing"
     takeaway: str          # the only LLM-authored field on this slide
     signature: str = "with you,"
-    cta: str = ""
-    handle: str = ""
 
 
 class ConversationSlide(BaseModel):
     """First structural (not prompt-only) change in the #39 v1 line of work
     (logbook #39, round 7) — the real CTA/question slide, matching the locked
     hand-written v1 reference format. Carousel-only, appended after
-    carousel_closing. label and invite are fixed brand copy, not model-generated
-    (same pattern as ClosingSlide.signature/cta/handle) — only question is ever
-    asked of the model.
+    carousel_closing — now the true last slide, so cta/handle (round 8) moved
+    here from ClosingSlide, where they were a leftover from before this slide
+    existed. label, invite, cta, and handle are all fixed brand copy, not
+    model-generated (same pattern as ClosingSlide.signature) — only question
+    is ever asked of the model.
 
     label originally used a leading emoji; verified via real Satori renders that
     this project's bundled Inter TTF has no glyph for it (nor for em dash,
@@ -67,6 +75,8 @@ class ConversationSlide(BaseModel):
     label: str = "- Conversation for today"
     question: str          # the only LLM-authored field on this slide
     invite: str = "I'd love to hear it."
+    cta: str = ""
+    handle: str = ""
 
 
 class QuoteSlide(BaseModel):

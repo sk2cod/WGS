@@ -23,7 +23,7 @@ def _brief(topic_id="mindset-self-doubt", approach=Approach.STORY, format=Format
     ).brief
 
 
-def _post(n_slides=5, heading="Pause", body="short body") -> GeneratedPost:
+def _post(n_slides=6, heading="Pause", body="short body") -> GeneratedPost:
     return GeneratedPost(
         slides=[
             BodySlide(statement_pre=heading, statement_script="", statement_post=body)
@@ -50,7 +50,7 @@ def test_validate_post_flags_forbidden_phrase():
 def test_validate_post_flags_wrong_slide_count():
     result = validate_post(_brief(), WGS_BRAND_KIT, _post(n_slides=2), [], "fp-3")
     assert not result.passed
-    assert any("expected 5 slide" in e for e in result.errors)
+    assert any("expected 6 slide" in e for e in result.errors)
 
 
 def test_validate_post_flags_word_limit():

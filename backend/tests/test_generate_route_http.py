@@ -18,14 +18,17 @@ from app.main import app
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 _ANGLE_JSON = json.dumps({"angle": "a specific test angle", "mood": "wisdom"})
-# 4 slides: cover, body, closing, conversation (logbook #39 round 7 -- the first
-# structural change in the v1 line of work; carousel_conversation is appended after
-# closing for every carousel brief regardless of approach).
+# 6 slides: cover, body x3, closing, conversation (logbook #39 -- conversation
+# added round 7, body count raised 1 -> 3 in round 8, fixed regardless of
+# approach; carousel_conversation is appended after closing for every carousel
+# brief regardless of approach).
 _DRAFT_CAROUSEL_JSON = json.dumps(
     {
         "slides": [
             {"headline_word": "PAUSE", "script_word": "first.", "kicker": "short kicker"},
+            {"statement_pre": "short body", "statement_script": "one", "statement_post": ""},
             {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
+            {"statement_pre": "short body", "statement_script": "three", "statement_post": ""},
             {"takeaway": "short body three"},
             {"question": "What would you tell a friend in your exact position?"},
         ],
@@ -35,8 +38,9 @@ _DRAFT_CAROUSEL_JSON = json.dumps(
 )
 
 # question_reflection isn't in TEACHING_BODY_APPROACHES, so a carousel using it gets
-# the old 3-slide (cover/body/closing) shape above — used to force a deterministic
-# slide count/shape in tests that are about route wiring, not approach-driven shape.
+# the carousel_body (not carousel_body_teaching) shape above — used to force a
+# deterministic slide count/shape in tests that are about route wiring, not
+# approach-driven shape.
 _NON_TEACHING_PRESELECTED = {
     "angle": "her exact accepted angle",
     "approach": "question_reflection",
@@ -96,7 +100,7 @@ def test_generate_route_returns_full_brief_and_post(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["brief"]["topic_id"] == "mindset-self-doubt"
-    assert len(body["post"]["slides"]) == 4
+    assert len(body["post"]["slides"]) == 6
     assert body["post"]["slides"][0]["template_id"] == "carousel_cover"
     assert body["hero_image_base64"] is not None
     assert body["validation_errors"] == []
@@ -272,7 +276,7 @@ def test_generate_from_brief_route_handles_non_taxonomy_topic_id(monkeypatch):
         "goal": "inform",
         "mood": "wisdom",
         "format": "carousel",
-        "slide_count": 4,  # cover, body, closing, conversation (logbook #39 round 7)
+        "slide_count": 6,  # cover, body x3, closing, conversation (logbook #39 round 8)
         "tone": ["warm"],
         "brand_voice_samples": ["a"],
         "signature_cta": None,
@@ -299,8 +303,8 @@ def test_generate_from_brief_route_handles_non_taxonomy_topic_id(monkeypatch):
     body = response.json()
     assert body["masthead"] == "WGS — SOCIETY NO. 01"
     assert body["brief"]["topic_id"] == "paste-link:abc123"
-    assert len(body["post"]["slides"]) == 4
-    assert body["post"]["slides"][3]["template_id"] == "carousel_conversation"
+    assert len(body["post"]["slides"]) == 6
+    assert body["post"]["slides"][5]["template_id"] == "carousel_conversation"
 
 
 def test_reshuffle_image_route_rejects_single_image_format(monkeypatch):

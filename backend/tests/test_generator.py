@@ -28,8 +28,8 @@ from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 # _sample_brief() -> carousel, story approach (a TEACHING_BODY_APPROACHES approach):
 # roles = [carousel_cover, carousel_body_teaching, carousel_body_teaching,
-#          carousel_closing, carousel_conversation] (conversation added logbook #39
-# round 7 -- the first structural change in the v1 line of work)
+#          carousel_body_teaching, carousel_closing, carousel_conversation] --
+# 3 body slides (logbook #39 round 8, up from 1-2), conversation (round 7).
 _DRAFT_CAROUSEL_JSON = json.dumps(
     {
         "slides": [
@@ -41,6 +41,10 @@ _DRAFT_CAROUSEL_JSON = json.dumps(
             {
                 "heading": "The intuition",
                 "body": "It's quieter, and it usually shows up as a question rather than a verdict.",
+            },
+            {
+                "heading": "The choice",
+                "body": "Every time you notice the difference, choosing gets a little easier.",
             },
             {"takeaway": "You get to decide which one leads."},
             {"question": "Which voice have you been listening to today?"},
@@ -102,9 +106,10 @@ def _citation_required_brief():
     ).brief
 
 
-def test_slide_roles_for_teaching_approach_uses_two_body_teaching_slides():
+def test_slide_roles_for_teaching_approach_uses_three_body_teaching_slides():
     assert slide_roles_for(_sample_brief()) == [
         "carousel_cover",
+        "carousel_body_teaching",
         "carousel_body_teaching",
         "carousel_body_teaching",
         "carousel_closing",
@@ -112,9 +117,11 @@ def test_slide_roles_for_teaching_approach_uses_two_body_teaching_slides():
     ]
 
 
-def test_slide_roles_for_non_teaching_approach_uses_one_body_slide():
+def test_slide_roles_for_non_teaching_approach_uses_three_body_slides():
     assert slide_roles_for(_non_teaching_brief()) == [
         "carousel_cover",
+        "carousel_body",
+        "carousel_body",
         "carousel_body",
         "carousel_closing",
         "carousel_conversation",
@@ -128,39 +135,45 @@ def test_slide_roles_for_single_image_direct_register_is_stat():
 def test_draft_post_parses_response():
     llm = _QueueLLM([_DRAFT_CAROUSEL_JSON])
     post = draft_post(_sample_brief(), WGS_BRAND_KIT, llm)
-    assert len(post.slides) == 5
+    assert len(post.slides) == 6
     assert post.slides[0].template_id == "carousel_cover"
     assert post.slides[1].template_id == "carousel_body_teaching"
     assert post.slides[2].template_id == "carousel_body_teaching"
-    assert post.slides[3].template_id == "carousel_closing"
-    assert post.slides[4].template_id == "carousel_conversation"
+    assert post.slides[3].template_id == "carousel_body_teaching"
+    assert post.slides[4].template_id == "carousel_closing"
+    assert post.slides[5].template_id == "carousel_conversation"
     assert post.caption == "The inner critic isn't always right."
     assert llm.tiers_called == ["strong"]
 
 
 def test_draft_post_fills_closing_slide_from_brand_kit_not_llm():
+    """cta/handle moved to the conversation slide in round 8 -- closing only
+    ever had takeaway (model-written) and signature (hardcoded, not
+    brand_kit-driven) to begin with."""
     llm = _QueueLLM([_DRAFT_CAROUSEL_JSON])
     post = draft_post(_sample_brief(), WGS_BRAND_KIT, llm)
-    closing = post.slides[3]
+    closing = post.slides[4]
     assert closing.takeaway == "You get to decide which one leads."
     assert closing.signature == "with you,"
-    assert closing.cta == WGS_BRAND_KIT.signature_cta
-    assert closing.handle == WGS_BRAND_KIT.handle
 
 
-def test_draft_post_fills_conversation_slide_label_and_invite_from_defaults_not_llm():
+def test_draft_post_fills_conversation_slide_fixed_fields_from_defaults_not_llm():
+    """label, invite, cta, and handle are all fixed brand copy -- cta/handle
+    moved here from the closing slide in round 8, the true last slide."""
     llm = _QueueLLM([_DRAFT_CAROUSEL_JSON])
     post = draft_post(_sample_brief(), WGS_BRAND_KIT, llm)
-    conversation = post.slides[4]
+    conversation = post.slides[5]
     assert conversation.question == "Which voice have you been listening to today?"
     assert conversation.label == "- Conversation for today"
     assert conversation.invite == "I'd love to hear it."
+    assert conversation.cta == WGS_BRAND_KIT.signature_cta
+    assert conversation.handle == WGS_BRAND_KIT.handle
 
 
 def test_draft_post_strips_markdown_fence():
     llm = _QueueLLM([f"```json\n{_DRAFT_CAROUSEL_JSON}\n```"])
     post = draft_post(_sample_brief(), WGS_BRAND_KIT, llm)
-    assert len(post.slides) == 5
+    assert len(post.slides) == 6
 
 
 def test_generate_post_runs_draft_critique_refine_when_enabled():
@@ -189,12 +202,16 @@ def _sample_draft() -> GeneratedPost:
                 heading="The intuition",
                 body="It's quieter, and it usually shows up as a question rather than a verdict.",
             ),
-            ClosingSlide(
-                takeaway="You get to decide which one leads.",
+            BodyTeachingSlide(
+                heading="The choice",
+                body="Every time you notice the difference, choosing gets a little easier.",
+            ),
+            ClosingSlide(takeaway="You get to decide which one leads."),
+            ConversationSlide(
+                question="Which voice have you been listening to today?",
                 cta=WGS_BRAND_KIT.signature_cta or "",
                 handle=WGS_BRAND_KIT.handle,
             ),
-            ConversationSlide(question="Which voice have you been listening to today?"),
         ],
         caption="The inner critic isn't always right.",
         hashtags=["#selfdoubt", "#growth"],
@@ -312,10 +329,10 @@ def test_critique_states_fixed_slide_shape_for_carousel():
     prompt = llm.prompts[0]
     assert "slide count and roles are fixed by the brief" in prompt
     assert "NOT" in prompt and "something to critique" in prompt
-    assert "exactly 5 slides" in prompt
+    assert "exactly 6 slides" in prompt
     assert (
-        "carousel_cover, carousel_body_teaching, carousel_body_teaching, carousel_closing, "
-        "carousel_conversation" in prompt
+        "carousel_cover, carousel_body_teaching, carousel_body_teaching, carousel_body_teaching, "
+        "carousel_closing, carousel_conversation" in prompt
     )
     assert "Never suggest the post needs more slides" in prompt
     # Deliberately narrow: content-quality critique must still be invited, not
@@ -368,7 +385,7 @@ def test_refine_still_respects_correct_slide_count_when_critique_agrees():
     changes needed, refine returns the draft unchanged, same slide count."""
     llm = _QueueLLM([_DRAFT_CAROUSEL_JSON])
     post = refine_post(_sample_brief(), WGS_BRAND_KIT, _sample_draft(), "no changes needed", llm)
-    assert len(post.slides) == 5
+    assert len(post.slides) == 6
 
 
 def test_body_slide_uses_old_fragment_schema_for_non_teaching_approach():
@@ -387,6 +404,16 @@ def test_body_slide_uses_old_fragment_schema_for_non_teaching_approach():
                             "statement_script": "but it isn't proof.",
                             "statement_post": "",
                         },
+                        {
+                            "statement_pre": "Certainty isn't",
+                            "statement_script": "the same as truth.",
+                            "statement_post": "",
+                        },
+                        {
+                            "statement_pre": "You get to",
+                            "statement_script": "choose",
+                            "statement_post": "which voice leads.",
+                        },
                         {"takeaway": "You get to choose which voice you listen to."},
                         {"question": "What would you tell a friend in your exact position?"},
                     ],
@@ -397,5 +424,5 @@ def test_body_slide_uses_old_fragment_schema_for_non_teaching_approach():
         ]
     )
     post = draft_post(_non_teaching_brief(), WGS_BRAND_KIT, llm)
-    assert len(post.slides) == 4
+    assert len(post.slides) == 6
     assert post.slides[1].template_id == "carousel_body"

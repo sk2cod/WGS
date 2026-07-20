@@ -6,12 +6,14 @@ Slide *shape* (which template each slide fills) is decided deterministically by
 Python via `slide_roles_for` — never guessed by the model — because it's a fixed
 function of format + approach (blueprint decision 3: "Python owns the brief and its
 constraints; the LLM generates inside it"). The model only fills each role's content
-fields; `carousel_closing`'s signature/cta/handle are brand-fixed copy, not
-generated, so only its `takeaway` is asked for."""
+fields; `carousel_closing`'s signature and `carousel_conversation`'s
+label/invite/cta/handle are brand-fixed copy, not generated, so only `takeaway` and
+`question` respectively are ever asked of the model."""
 
 from __future__ import annotations
 
 import json
+import math
 
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief
@@ -58,8 +60,9 @@ _ROLE_FIELDS_EXAMPLE = {
         'substance, not a fragment"}'
     ),
     "carousel_closing": '{"takeaway": "the one-line takeaway"}',
-    # label and invite are fixed brand copy (ConversationSlide defaults) — only
-    # question is ever asked of the model, same pattern as carousel_closing.
+    # label, invite, cta, and handle are fixed brand copy (ConversationSlide
+    # defaults) — only question is ever asked of the model, same pattern as
+    # carousel_closing's signature.
     "carousel_conversation": '{"question": "the one genuine, open, unresolved question"}',
     "single_quote": '{"quote": "the quote text"}',
     "single_stat": (
@@ -273,6 +276,17 @@ _CAROUSEL_V1_ARC_INSTRUCTION = (
     "question tied directly to this post's specific anchor — not a generic "
     "engagement prompt. It should feel like a natural continuation of the "
     "anchor's own image, the way a reader would ask it back to themselves."
+    "\n\n"
+    # Added in logbook #39's round 8, alongside raising body slides 1-2 -> 3:
+    # anti-padding + split guidance, adapted from a proven pattern found by
+    # auditing a separate project's carousel mechanism, not invented fresh.
+    "You have three body slides — use as many as the content genuinely needs, "
+    "but do not pad to fill all three, and do not force one idea across "
+    "multiple slides just to use the space available. If a single slide's "
+    "content has more than one distinct fact or beat genuinely competing for "
+    "room — especially when a reframe depends on a contrast between two "
+    "things — split it across two slides rather than compressing both into "
+    "one. Each body slide should do one clear job."
 )
 
 _CAROUSEL_V1_CAPTION_INSTRUCTION = (
@@ -291,12 +305,16 @@ _CAROUSEL_V1_SPECIFICITY_ACTIONABILITY_SAVEABILITY_INSTRUCTION = (
 
 def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
     """Deterministic role sequence for this brief — the only place slide shape is
-    decided. Carousel: cover, (n-3) body slides, closing, conversation — the body
-    role is carousel_body_teaching (room for 1-2 full sentences) for approaches in
-    TEACHING_BODY_APPROACHES, carousel_body (a single emphasis fragment) otherwise.
-    Single image: the quote card for the poetic register, the stat card for the
-    direct register (Section 6: same poetic/direct split that already resolves
-    brand voice).
+    decided. Carousel: cover, 3 body slides, closing, conversation — 6 slides
+    total, fixed regardless of approach (logbook #39, round 8 — previously body
+    count varied 1-2 by TEACHING_BODY_APPROACHES; the confirmed final v1 shape
+    always uses 3, on the understanding that the arc instruction's anti-padding
+    guidance, not slide count, is what should stop thin content from being
+    stretched to fill them). The body *role* itself (carousel_body_teaching vs
+    carousel_body) still varies by approach — TEACHING_BODY_APPROACHES still
+    gets the fuller per-slide field, just 3 of it now, not 2. Single image: the
+    quote card for the poetic register, the stat card for the direct register
+    (Section 6: same poetic/direct split that already resolves brand voice).
 
     carousel_conversation (logbook #39, round 7 — the first structural, not
     prompt-only, change in the v1 line of work) is appended unconditionally after
@@ -310,9 +328,20 @@ def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
     body_role: SlideRole = (
         "carousel_body_teaching" if brief.approach.value in TEACHING_BODY_APPROACHES else "carousel_body"
     )
-    n = brief.slide_count
-    body_count = max(n - 3, 0)
-    return ["carousel_cover"] + [body_role] * body_count + ["carousel_closing", "carousel_conversation"]
+    return ["carousel_cover"] + [body_role] * 3 + ["carousel_closing", "carousel_conversation"]
+
+
+# Added in logbook #39's round 8: a real near-miss (37 vs. 30 words) showed a
+# hard cap with no tolerance flags trivial overages as if they were the same
+# defect as a genuinely bloated slide. 10% buffer, rounded up. Carousel-only
+# (corrected in the same round after first being applied universally by
+# mistake) — applied to the system prompt's stated cap, critique's own
+# enforcement of it, and validator.py's deterministic _check_format, so what
+# the model is told, what critique enforces, and what the app's own
+# validation warning shows all agree. single_image keeps the original,
+# untolerant cap everywhere.
+def _tolerant_word_cap(cap: int) -> int:
+    return math.ceil(cap * 1.1)
 
 
 def _slides_shape_description(roles: list[SlideRole]) -> str:
@@ -322,7 +351,7 @@ def _slides_shape_description(roles: list[SlideRole]) -> str:
 
 def slide_text(slide: Slide) -> str:
     """All LLM-authored text on a slide, for word-limit/forbidden-phrase checks.
-    carousel_closing's signature/cta/handle and carousel_conversation's label/invite
+    carousel_closing's signature and carousel_conversation's label/invite/cta/handle
     are brand-fixed, not generated, so they're excluded here."""
     if isinstance(slide, CoverSlide):
         return f"{slide.headline_word} {slide.script_word} {slide.kicker}"
@@ -346,11 +375,15 @@ def _build_slide(role: SlideRole, raw: dict, brand_kit: BrandKit) -> Slide:
         return ClosingSlide(
             takeaway=str(raw.get("takeaway", "")),
             signature="with you,",
+        )
+    if role == "carousel_conversation":
+        # cta/handle moved here from carousel_closing in round 8 -- it's the
+        # true last slide as of round 7, they were a leftover from before.
+        return ConversationSlide(
+            question=str(raw.get("question", "")),
             cta=brand_kit.signature_cta or "",
             handle=brand_kit.handle,
         )
-    if role == "carousel_conversation":
-        return ConversationSlide(question=str(raw.get("question", "")))
     return _ROLE_MODEL[role].model_validate(raw)
 
 
@@ -412,6 +445,24 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
 
     kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
 
+    # Correction in logbook #39's round 8: the 10% word-budget tolerance was
+    # applied universally by mistake — pulled back to carousel-only here,
+    # matching every other v1 change. single_image reverts to the original
+    # hard cap, unchanged.
+    if brief.format == Format.CAROUSEL:
+        word_cap_line = (
+            f"Max words per slide (all text fields on that slide, combined): "
+            f"{brief.max_words_per_slide}, with up to 10% over "
+            f"({_tolerant_word_cap(brief.max_words_per_slide)}) as an acceptable buffer, "
+            "not a hard wall — stay near the target, but a few words over it alone is "
+            "not a defect.\n"
+        )
+    else:
+        word_cap_line = (
+            f"Max words per slide (all text fields on that slide, combined): "
+            f"{brief.max_words_per_slide}\n"
+        )
+
     # Carousel-only "v1" content-voice experiment (logbook #39) — single_image takes
     # the else branch, completely unchanged from before this experiment existed.
     if brief.format == Format.CAROUSEL:
@@ -443,7 +494,7 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
         f"Never use: {forbidden}\n"
         f"Tone for this post: {', '.join(brief.tone)}\n"
         f"Approach: {brief.approach.value} — {_APPROACH_DEFINITIONS[brief.approach.value]}\n"
-        f"Max words per slide (all text fields on that slide, combined): {brief.max_words_per_slide}\n"
+        f"{word_cap_line}"
         f"{citation_block}"
         f"{kicker_block}"
         "\nThis post has the following slides, each already assigned a fixed visual "
@@ -608,21 +659,37 @@ def critique_post(
             f"{specificity_instruction}{actionability_instruction}{saveability_instruction}"
         )
     # Added after logbook #39's first real-output review round, unconditionally for
-    # both formats: ClosingSlide.cta is hardcoded from brand_kit.signature_cta in
-    # _build_slide() and is never model output, so critique spending part of its
-    # limited token budget flagging it (3 of 5 real carousel runs) was pure waste —
-    # refine has no way to act on that feedback regardless of format.
+    # both formats: cta/handle are hardcoded from brand_kit.signature_cta/handle in
+    # _build_slide() and are never model output, so critique spending part of its
+    # limited token budget flagging them (3 of 5 real carousel runs) was pure waste —
+    # refine has no way to act on that feedback regardless of format. Moved from the
+    # closing slide to the conversation slide in round 8 (cta/handle relocated there,
+    # the true last slide as of round 7) — this instruction updated to match.
     cta_instruction = (
-        "Do not evaluate or flag the closing slide's cta field. It is a fixed brand "
-        "value from brand_kit.signature_cta, not model-generated, and cannot be "
-        "changed by refine. "
+        "Do not evaluate or flag the conversation slide's cta or handle fields. "
+        "They are fixed brand values from brand_kit.signature_cta/brand_kit.handle, "
+        "not model-generated, and cannot be changed by refine. "
+    )
+    # Added in logbook #39's round 8, corrected to carousel-only in the same
+    # round after being applied universally by mistake — matches the system
+    # prompt's word_cap_line above and every other v1 change in scope.
+    # single_image reverts to no explicit tolerance statement here, same as
+    # before round 8 (the base "word limits" mention in the prompt below still
+    # applies, just without a stated buffer).
+    word_tolerance_instruction = (
+        f"Only flag a slide's word count if it exceeds "
+        f"{_tolerant_word_cap(brief.max_words_per_slide)} words — the "
+        f"{brief.max_words_per_slide}-word target plus its 10% buffer. A few words "
+        "over the bare target alone is not a defect. "
+        if brief.format == Format.CAROUSEL
+        else ""
     )
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         "Critique it against the brand voice, the forbidden list, tone, word limits, and "
         f"whether it reads as specific rather than generic. {citation_instruction}"
         f"{shape_instruction}{kicker_instruction}{approach_instruction}{voice_instruction}"
-        f"{content_quality_instruction}{cta_instruction}"
+        f"{content_quality_instruction}{cta_instruction}{word_tolerance_instruction}"
         "Be concrete and short — list only real problems, or say 'no changes needed'."
     )
     # Carousel's checklist replaced 3 short checks with one longer one (#39), grew

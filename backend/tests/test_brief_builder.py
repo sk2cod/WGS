@@ -38,13 +38,19 @@ def test_build_brief_resolves_poetic_register_for_story_approach():
         memory=[],
     )
     assert result.brief.brand_voice_samples == WGS_BRAND_KIT.voice_samples.poetic
-    # story is a TEACHING_BODY_APPROACHES approach: cover + 2 teaching body +
-    # closing + conversation (logbook #39 round 7)
-    assert result.brief.slide_count == 5
+    # cover + 3 body (teaching) + closing + conversation = 6, fixed regardless
+    # of approach as of logbook #39 round 8 (was 5, teaching-conditional, in
+    # round 7)
+    assert result.brief.slide_count == 6
     assert result.masthead == "WGS — MINDSET NO. 01"
 
 
-def test_build_brief_carousel_slide_count_is_4_for_non_teaching_approach():
+def test_build_brief_carousel_slide_count_is_6_regardless_of_approach():
+    """logbook #39 round 8: body slide count fixed at 3 for every carousel
+    approach, so the old teaching-vs-non-teaching slide_count split (5 vs 4)
+    collapsed to a flat 6. The body *role* (carousel_body_teaching vs
+    carousel_body) still varies by approach -- that's slide_roles_for's job,
+    not this count."""
     topics_by_id = get_topics_by_id()
     result = build_brief(
         topic_id="mindset-self-doubt",
@@ -56,9 +62,9 @@ def test_build_brief_carousel_slide_count_is_4_for_non_teaching_approach():
         brand_kit=WGS_BRAND_KIT,
         memory=[],
     )
-    # question_reflection isn't in TEACHING_BODY_APPROACHES: cover + 1 body +
-    # closing + conversation (logbook #39 round 7)
-    assert result.brief.slide_count == 4
+    # question_reflection isn't in TEACHING_BODY_APPROACHES, but slide count is
+    # fixed at 6 for carousel regardless (round 8) -- same as the teaching case.
+    assert result.brief.slide_count == 6
 
 
 def test_build_brief_resolves_direct_register_for_educational_approach():

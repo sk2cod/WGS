@@ -301,8 +301,8 @@ function SlideEditForm({
         </section>
       );
     case "carousel_conversation":
-      // label and invite are fixed brand copy (same pattern as carousel_closing's
-      // signature/cta/handle) — only question is ever editable here.
+      // label, invite, cta, and handle are all fixed brand copy (same pattern
+      // as carousel_closing's signature) — only question is ever editable here.
       return (
         <section style={cardStyle}>
           <div style={labelStyle}>Edit this slide</div>
