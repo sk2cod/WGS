@@ -10,12 +10,16 @@ from app.taxonomy.voice_register import APPROACH_REGISTER
 
 
 def _default_slide_count(format: Format, approach: Approach) -> int:
-    """Carousels default to 4 slides (cover + 2 teaching body + closing) for
-    approaches that need real teaching room, 3 otherwise (cover + 1 body +
-    closing) — see taxonomy/approaches.py:TEACHING_BODY_APPROACHES."""
+    """Carousels default to 5 slides (cover + 2 teaching body + closing +
+    conversation) for approaches that need real teaching room, 4 otherwise
+    (cover + 1 body + closing + conversation) — see
+    taxonomy/approaches.py:TEACHING_BODY_APPROACHES. The +1 vs. the original
+    4/3 is carousel_conversation (logbook #39, round 7) — the first structural
+    change in the v1 line of work, appended after closing for every carousel
+    brief regardless of approach."""
     if format == Format.SINGLE_IMAGE:
         return 1
-    return 4 if approach.value in TEACHING_BODY_APPROACHES else 3
+    return 5 if approach.value in TEACHING_BODY_APPROACHES else 4
 
 
 def _hero_image_prompt(subject: str, mood: str) -> str:

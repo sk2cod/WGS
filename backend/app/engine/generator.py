@@ -20,6 +20,7 @@ from app.models.post import (
     BodySlide,
     BodyTeachingSlide,
     ClosingSlide,
+    ConversationSlide,
     CoverSlide,
     GeneratedPost,
     QuoteSlide,
@@ -36,6 +37,7 @@ _ROLE_MODEL = {
     "carousel_body": BodySlide,
     "carousel_body_teaching": BodyTeachingSlide,
     "carousel_closing": ClosingSlide,
+    "carousel_conversation": ConversationSlide,
     "single_quote": QuoteSlide,
     "single_stat": StatSlide,
 }
@@ -56,6 +58,9 @@ _ROLE_FIELDS_EXAMPLE = {
         'substance, not a fragment"}'
     ),
     "carousel_closing": '{"takeaway": "the one-line takeaway"}',
+    # label and invite are fixed brand copy (ConversationSlide defaults) — only
+    # question is ever asked of the model, same pattern as carousel_closing.
+    "carousel_conversation": '{"question": "the one genuine, open, unresolved question"}',
     "single_quote": '{"quote": "the quote text"}',
     "single_stat": (
         '{"kicker": "a short uppercase label", "number": "a big number or stat, e.g. 73%", '
@@ -186,7 +191,21 @@ _CAROUSEL_V1_ARC_INSTRUCTION = (
     "etymology, a philosophical idea, a moment from someone's real life. Favor an "
     "anchor that carries its own specific word or phrase from another era, culture, "
     "or discipline when one genuinely fits — this is what gives the post its "
-    "editorial, researched feel, not generic inspiration. Never introduce a second, "
+    "editorial, researched feel, not generic inspiration. "
+    # Appended in logbook #39's round-6 review, found through real organic use (not
+    # controlled testing): a real generation abandoned the angle's own concrete
+    # anchor for an unrelated, more evocative historical one partway through, with no
+    # bridge between them — the "favor an anchor with its own word/phrase" sentence
+    # above was incentivizing a swap toward whatever felt most evocative, rather than
+    # staying with what the angle had already established.
+    "This must still be the same anchor the angle itself already establishes — its "
+    "specific concrete detail, moment, or thing. Do not replace it with a different "
+    "anchor partway through the post, even a more evocative or historical one. If a "
+    "historical, cultural, or linguistic reference genuinely adds something, it must "
+    "be explicitly and clearly connected in the text to the angle's own anchor — the "
+    "reader should never have to infer the link between two separate images on their "
+    "own. One anchor, established once, carries the whole post. "
+    "Never introduce a second, "
     "unrelated example partway through. Deepen the one you opened with instead of "
     "moving to a new one.\n\n"
     "Open on the anchor itself, named plainly, by slide 1 or 2 — concrete "
@@ -195,7 +214,14 @@ _CAROUSEL_V1_ARC_INSTRUCTION = (
     "or two turns toward the reader or the human condition, no more, each carried "
     "by a tentative word — \"I wonder,\" \"perhaps,\" \"maybe,\" \"somewhere along "
     "the way.\" Do not let this language become the default register of every "
-    "slide. Once a turn has landed, the following line can state the reframe more "
+    "slide. "
+    # Appended in logbook #39's round-6 review, found through real organic use: a
+    # real generation had zero hedges anywhere, skipping the pivot moment entirely,
+    # and nothing in the rule above (a ceiling, not a floor) would have flagged that.
+    "At least one tentative moment (\"I wonder,\" \"perhaps,\" \"maybe,\" or similar) "
+    "must appear somewhere in the post — in a body slide, the closing, or the "
+    "caption. The pivot from anchor to reader cannot be skipped entirely. "
+    "Once a turn has landed, the following line can state the reframe more "
     "plainly again. Close on an image or a general truth that lingers — never "
     "advice, never an instruction, never a command aimed at \"you.\" Let the "
     "reader draw the connection to their own life themselves.\n\n"
@@ -238,6 +264,15 @@ _CAROUSEL_V1_ARC_INSTRUCTION = (
     "in the caption or, at most, the one designated pivot slide later in the "
     "carousel, phrased with tentative language, never as a blunt question dropped "
     "into the anchor's introduction."
+    "\n\n"
+    # Added in logbook #39's round 7 — the first structural (not prompt-only)
+    # change in this line of work: a real carousel_conversation slide, matching
+    # the locked hand-written v1 reference, now exists after carousel_closing.
+    # This guidance is for its one model-written field, question.
+    "The final conversation-slide question must be a genuine, open, unresolved "
+    "question tied directly to this post's specific anchor — not a generic "
+    "engagement prompt. It should feel like a natural continuation of the "
+    "anchor's own image, the way a reader would ask it back to themselves."
 )
 
 _CAROUSEL_V1_CAPTION_INSTRUCTION = (
@@ -256,12 +291,18 @@ _CAROUSEL_V1_SPECIFICITY_ACTIONABILITY_SAVEABILITY_INSTRUCTION = (
 
 def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
     """Deterministic role sequence for this brief — the only place slide shape is
-    decided. Carousel: cover, (n-2) body slides, closing — the body role is
-    carousel_body_teaching (room for 1-2 full sentences) for approaches in
+    decided. Carousel: cover, (n-3) body slides, closing, conversation — the body
+    role is carousel_body_teaching (room for 1-2 full sentences) for approaches in
     TEACHING_BODY_APPROACHES, carousel_body (a single emphasis fragment) otherwise.
     Single image: the quote card for the poetic register, the stat card for the
     direct register (Section 6: same poetic/direct split that already resolves
-    brand voice)."""
+    brand voice).
+
+    carousel_conversation (logbook #39, round 7 — the first structural, not
+    prompt-only, change in the v1 line of work) is appended unconditionally after
+    carousel_closing for every carousel brief, regardless of approach — the real
+    CTA/question slide matching the locked hand-written v1 reference. single_image
+    is completely untouched by this."""
     if brief.format == Format.SINGLE_IMAGE:
         register = APPROACH_REGISTER[brief.approach.value]
         return ["single_quote"] if register == "poetic" else ["single_stat"]
@@ -270,8 +311,8 @@ def slide_roles_for(brief: ContentBrief) -> list[SlideRole]:
         "carousel_body_teaching" if brief.approach.value in TEACHING_BODY_APPROACHES else "carousel_body"
     )
     n = brief.slide_count
-    body_count = max(n - 2, 0)
-    return ["carousel_cover"] + [body_role] * body_count + ["carousel_closing"]
+    body_count = max(n - 3, 0)
+    return ["carousel_cover"] + [body_role] * body_count + ["carousel_closing", "carousel_conversation"]
 
 
 def _slides_shape_description(roles: list[SlideRole]) -> str:
@@ -281,8 +322,8 @@ def _slides_shape_description(roles: list[SlideRole]) -> str:
 
 def slide_text(slide: Slide) -> str:
     """All LLM-authored text on a slide, for word-limit/forbidden-phrase checks.
-    carousel_closing's signature/cta/handle are brand-fixed, not generated, so
-    they're excluded here."""
+    carousel_closing's signature/cta/handle and carousel_conversation's label/invite
+    are brand-fixed, not generated, so they're excluded here."""
     if isinstance(slide, CoverSlide):
         return f"{slide.headline_word} {slide.script_word} {slide.kicker}"
     if isinstance(slide, BodySlide):
@@ -291,6 +332,8 @@ def slide_text(slide: Slide) -> str:
         return f"{slide.heading} {slide.body}"
     if isinstance(slide, ClosingSlide):
         return slide.takeaway
+    if isinstance(slide, ConversationSlide):
+        return slide.question
     if isinstance(slide, QuoteSlide):
         return slide.quote
     if isinstance(slide, StatSlide):
@@ -306,6 +349,8 @@ def _build_slide(role: SlideRole, raw: dict, brand_kit: BrandKit) -> Slide:
             cta=brand_kit.signature_cta or "",
             handle=brand_kit.handle,
         )
+    if role == "carousel_conversation":
+        return ConversationSlide(question=str(raw.get("question", "")))
     return _ROLE_MODEL[role].model_validate(raw)
 
 
@@ -521,6 +566,25 @@ def critique_post(
             "question_reflection's required question isn't yet present anywhere in "
             "the post, the caption is the correct place for it, not an early body "
             "slide. "
+            # Appended in logbook #39's round-6 review, found through real organic
+            # use (not controlled testing): a real generation swapped the angle's own
+            # anchor for an unrelated historical one partway through (mindset-
+            # perfectionism), and a separate real generation had zero hedges anywhere
+            # (mindset-boundaries), skipping the pivot moment entirely.
+            "Confirm the post never introduces a materially different anchor from the "
+            "one the angle itself established — flag it if a new historical, "
+            "cultural, or object-based reference appears without being explicitly "
+            "connected back to the angle's own concrete detail. "
+            "Confirm at least one tentative moment (\"I wonder,\" \"perhaps,\" "
+            "\"maybe,\" or similar) appears somewhere in the post — flag it if the "
+            "pivot from anchor to reader is skipped entirely, not just if it's "
+            "overused. "
+            # Added in logbook #39's round 7, alongside the new carousel_conversation
+            # slide (the first structural change in this line of work).
+            "Confirm the conversation-slide question is genuinely tied to this "
+            "post's anchor, not generic or interchangeable with any other post. "
+            "This is where question_reflection's required open question belongs — "
+            "the closing slide before it should stay declarative regardless. "
         )
     else:
         specificity_instruction = (
@@ -619,6 +683,19 @@ def refine_post(
         if brief.format == Format.CAROUSEL
         else ""
     )
+    # Fourth backstop, same #29/#37 two-layer pattern, added in logbook #39's round 6:
+    # both found through real organic use of the live app, not controlled testing —
+    # an anchor swap (mindset-perfectionism) and a missing hedge (mindset-boundaries).
+    # Carousel-only, same reasoning as the two backstops above.
+    anchor_lock_and_hedge_floor_instruction = (
+        "\n\nIf critique flags an anchor swap, fix it by either returning to the "
+        "angle's own original anchor or explicitly connecting the new reference back "
+        "to it in the text — don't leave two disconnected images in the same post. "
+        "If critique flags a missing hedge, add exactly one tentative moment at the "
+        "natural pivot point — don't add more than one just because one was missing."
+        if brief.format == Format.CAROUSEL
+        else ""
+    )
     prompt = (
         f"Here is a draft post:\n{draft.model_dump_json()}\n\n"
         f"Critique:\n{critique}\n\n"
@@ -632,6 +709,7 @@ def refine_post(
         "content of those slides."
         f"{closing_declarative_instruction}"
         f"{body_slide_question_instruction}"
+        f"{anchor_lock_and_hedge_floor_instruction}"
     )
     raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=1500)
     return _parse_post(raw, roles, brand_kit)

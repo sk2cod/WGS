@@ -56,6 +56,7 @@ export type TemplateId =
   | "carousel_body"
   | "carousel_body_teaching"
   | "carousel_closing"
+  | "carousel_conversation"
   | "single_quote"
   | "single_stat";
 
@@ -86,6 +87,16 @@ export interface CarouselClosingContent {
   handle: string; // full @handle, spelled out only here (Section 12)
 }
 
+/** The real CTA/question slide (logbook #39, round 7) — the first structural,
+ * not prompt-only, change in the v1 line of work. label and invite are fixed
+ * brand copy, not model-generated (same pattern as CarouselClosingContent's
+ * signature/cta/handle) — only question is ever asked of the model. */
+export interface CarouselConversationContent {
+  label: string;
+  question: string;
+  invite: string;
+}
+
 export interface SingleQuoteContent {
   quote: string;
 }
@@ -101,6 +112,7 @@ export type SlideContent =
   | CarouselBodyContent
   | CarouselBodyTeachingContent
   | CarouselClosingContent
+  | CarouselConversationContent
   | SingleQuoteContent
   | SingleStatContent;
 

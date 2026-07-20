@@ -2,6 +2,7 @@ import type {
   CarouselBodyContent,
   CarouselBodyTeachingContent,
   CarouselClosingContent,
+  CarouselConversationContent,
   CarouselCoverContent,
   Mood,
   SingleQuoteContent,
@@ -70,6 +71,11 @@ export interface ApiBodyTeachingSlide extends CarouselBodyTeachingContent {
 export interface ApiClosingSlide extends CarouselClosingContent {
   template_id: "carousel_closing";
 }
+// logbook #39, round 7 -- the real CTA/question slide, first structural (not
+// prompt-only) change in the v1 line of work.
+export interface ApiConversationSlide extends CarouselConversationContent {
+  template_id: "carousel_conversation";
+}
 export interface ApiQuoteSlide extends SingleQuoteContent {
   template_id: "single_quote";
 }
@@ -82,6 +88,7 @@ export type ApiSlide =
   | ApiBodySlide
   | ApiBodyTeachingSlide
   | ApiClosingSlide
+  | ApiConversationSlide
   | ApiQuoteSlide
   | ApiStatSlide;
 

@@ -36,6 +36,8 @@ _SLIDE_CONTENT_BY_ROLE = {
     "carousel_body": {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
     "carousel_body_teaching": {"heading": "A heading", "body": "A full sentence of teaching content here."},
     "carousel_closing": {"takeaway": "short body three"},
+    # logbook #39 round 7 -- label/invite are fixed defaults, only question is asked
+    "carousel_conversation": {"question": "What would you tell a friend in your exact position?"},
 }
 
 
@@ -114,7 +116,7 @@ def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
     )
 
     assert result.post.slides[0].template_id == "carousel_cover"
-    assert result.post.slides[-1].template_id == "carousel_closing"
+    assert result.post.slides[-1].template_id == "carousel_conversation"
     assert result.brief.mood == "bold"
     assert result.brief.angle == "a specific test angle"
     assert result.hero_image_base64 is not None

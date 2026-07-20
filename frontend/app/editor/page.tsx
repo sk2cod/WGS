@@ -300,6 +300,15 @@ function SlideEditForm({
           <Field label="Takeaway" value={slide.takeaway} onChange={(v) => onChange({ takeaway: v })} />
         </section>
       );
+    case "carousel_conversation":
+      // label and invite are fixed brand copy (same pattern as carousel_closing's
+      // signature/cta/handle) — only question is ever editable here.
+      return (
+        <section style={cardStyle}>
+          <div style={labelStyle}>Edit this slide</div>
+          <Field label="Question" value={slide.question} onChange={(v) => onChange({ question: v })} multiline />
+        </section>
+      );
     case "single_quote":
       return (
         <section style={cardStyle}>

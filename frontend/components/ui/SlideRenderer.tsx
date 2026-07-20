@@ -4,6 +4,7 @@ import CarouselCover from "@/components/slides/CarouselCover";
 import CarouselBody from "@/components/slides/CarouselBody";
 import CarouselBodyTeaching from "@/components/slides/CarouselBodyTeaching";
 import CarouselClosing from "@/components/slides/CarouselClosing";
+import ConversationSlide from "@/components/slides/ConversationSlide";
 import SingleQuote from "@/components/slides/SingleQuote";
 import SingleStat from "@/components/slides/SingleStat";
 
@@ -35,6 +36,8 @@ export default function SlideRenderer({ slide, masthead, tokens, heroImageUrl }:
       return <CarouselBodyTeaching masthead={masthead} tokens={tokens} {...slide} />;
     case "carousel_closing":
       return <CarouselClosing masthead={masthead} tokens={tokens} {...slide} />;
+    case "carousel_conversation":
+      return <ConversationSlide masthead={masthead} tokens={tokens} {...slide} />;
     case "single_quote":
       return <SingleQuote masthead={masthead} tokens={tokens} {...slide} />;
     case "single_stat":

@@ -87,7 +87,7 @@ def test_build_paste_link_brief_pins_source_and_requires_citation():
     assert result.brief.requires_citation is True
     assert result.brief.sources == [source]
     assert result.brief.topic_name == source.title
-    assert result.brief.slide_count == 3  # carousel default
+    assert result.brief.slide_count == 4  # carousel default (logbook #39 round 7)
 
 
 def test_build_paste_link_brief_uses_llm_visual_subject_for_hero_image_prompt():

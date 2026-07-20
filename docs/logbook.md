@@ -2187,6 +2187,178 @@ question could leak to (a mid-carousel pivot slide getting an unhedged, un-tenta
 question, for instance) before concluding the underlying approach-fidelity ambiguity is
 fully contained rather than just found in two of however many places it could surface.
 
+### Round 6 — anchor-lock and hedge-floor fixes, found through real organic use of the live app
+
+**A change in how this experiment is being verified, worth stating explicitly.** Every
+prior round's findings and re-checks came from sessions here — either a controlled
+5-pair test batch or a direct real `/generate`-pipeline call driven from this session.
+This round's two findings came from somewhere different: **real, organic use of the
+live deployed app**, not anything run from this session. Verification for this round is
+**deliberately deferred to that same live, organic use going forward**, not another
+CC-driven test batch — a decision made explicitly here, not a gap. Implementation and
+documentation only this round; no `/generate` calls were run from this session as part
+of applying these two fixes.
+
+**Finding 1 — anchor swap.** A real generation on `mindset-perfectionism` (headline
+`PERSIAN FLAW`, going by the angle's own material) abandoned the angle's own concrete
+anchor — a specific email-rewriting story — partway through, replacing it with an
+unrelated historical anchor (Persian carpet weaving) with no bridge between the two,
+leaving the hook, body, and closing disconnected from each other. Likely cause: the
+existing "favor an anchor that carries its own specific word or phrase from another
+era, culture, or discipline when one genuinely fits" sentence (added in the original
+round-1 arc instruction) was incentivizing a swap toward whatever felt most evocative,
+rather than requiring the model to stay with the anchor the angle itself had already
+established.
+
+**Finding 2 — missing hedge.** A real generation on `mindset-boundaries` (headline
+`KIVELA`) produced a post with zero tentative-language moments anywhere — no "I
+wonder," no "perhaps," nothing — skipping the anchor-to-reader pivot entirely. The
+existing hedge-frequency rule ("one or two turns... no more") was a ceiling with no
+floor; nothing in it, or in critique's checklist, would have flagged a post that never
+pivoted at all as a defect.
+
+**Fixes, all carousel-only, all verbatim as specified:**
+
+1. **Arc instruction (system prompt) — anchor-lock**, appended directly after the
+   existing "favor an anchor..." sentence:
+   > This must still be the same anchor the angle itself already establishes — its specific concrete detail, moment, or thing. Do not replace it with a different anchor partway through the post, even a more evocative or historical one. If a historical, cultural, or linguistic reference genuinely adds something, it must be explicitly and clearly connected in the text to the angle's own anchor — the reader should never have to infer the link between two separate images on their own. One anchor, established once, carries the whole post.
+2. **Arc instruction (system prompt) — hedge floor**, added next to the existing
+   hedge-frequency ceiling:
+   > At least one tentative moment ("I wonder," "perhaps," "maybe," or similar) must appear somewhere in the post — in a body slide, the closing, or the caption. The pivot from anchor to reader cannot be skipped entirely.
+3. **Critique checklist**, both fixes, appended to the existing carousel checklist:
+   > Confirm the post never introduces a materially different anchor from the one the angle itself established — flag it if a new historical, cultural, or object-based reference appears without being explicitly connected back to the angle's own concrete detail. Confirm at least one tentative moment ("I wonder," "perhaps," "maybe," or similar) appears somewhere in the post — flag it if the pivot from anchor to reader is skipped entirely, not just if it's overused.
+4. **`refine_post` backstop** (fourth instance of the #29/#37 two-layer pattern in
+   this entry), appended to `refine_post`'s own task prompt:
+   > If critique flags an anchor swap, fix it by either returning to the angle's own original anchor or explicitly connecting the new reference back to it in the text — don't leave two disconnected images in the same post. If critique flags a missing hedge, add exactly one tentative moment at the natural pivot point — don't add more than one just because one was missing.
+
+Confirmed locally (direct prompt-string capture via a `FakeLLM` that swallows the
+response, no API calls) before anything else: all four additions present verbatim in
+the rendered carousel prompt at their respective touch points (`_brief_system_prompt`
+×2, `critique_post`, `refine_post`), completely absent for `Format.SINGLE_IMAGE` in all
+four. Full backend suite re-run: **126/126 passing**, no regressions.
+
+**Status: still OPEN/EXPERIMENTAL.** Implementation-only round — no live verification
+attempted or claimed here. The next signal on whether these two fixes actually hold
+will come from continued real, organic use of the live app, not a scheduled CC-driven
+test round; that's a deliberate change in this entry's verification approach from here
+on, not an oversight to fill in later.
+
+### Round 7 — the real CTA/question slide: the first structural change in the v1 line of work
+
+**Explicitly different in kind from rounds 1–6.** Every prior round in this entry was a
+prompt-text change — wording added to the arc instruction, the critique checklist, or a
+`refine_post` backstop, all operating within the existing five/six-template slide shape.
+This round adds a genuine new slide type, changing carousel's slide count for the first
+time (4–5, not 3–4) — done deliberately, per direct instruction to prioritize matching
+the locked hand-written v1 reference format over preserving the shape locked in
+`implementation-guide.md` Section 10 / `blueprint.md` Section 12.
+
+**What was built:** a new `ConversationSlide` (`models/post.py`) — `label` (fixed:
+`"🌿 Conversation for today"`), `question` (the only model-written field, the real
+open question tied to the post's anchor), `invite` (fixed: `"I'd love to hear it."`) —
+same fixed-field pattern as `ClosingSlide.signature/cta/handle`. `slide_roles_for()`
+appends `carousel_conversation` after `carousel_closing` for every carousel brief,
+unconditionally on approach (single_image completely untouched). The shared system
+prompt's slide-shape block, the arc instruction (new guidance for the question field,
+verbatim as specified), and the carousel critique checklist (new confirm clause,
+verbatim as specified) were all updated to match. Frontend: a new
+`ConversationSlide.tsx` component (masthead-pinned-top / flex:1-centered layout, same
+convention as `CarouselClosing`), wired into both `SlideRenderer.tsx` (editor preview)
+and `app/api/render/route.tsx` (the real PNG export route) — confirmed by direct
+inspection, not assumed, the same explicit check logbook #32 did for `Masthead.tsx`.
+Also wired into `app/preview/page.tsx` (now 7 templates × 3 moods) and
+`app/editor/page.tsx`'s `SlideEditForm` (the `question` field is editable; `label`/
+`invite` are not, matching `ClosingSlide`'s pattern).
+
+**Ripple effects, checked rather than assumed:**
+- `MemoryRecord.slides` (Supabase jsonb, added #35) round-trips the new slide type
+  with **zero special-casing needed** — `db/supabase.py`'s `fetch_memory`/
+  `append_memory`/`update_memory` are already fully generic (`model_dump(mode="json")`
+  / `model_validate(row)` against the `Slide` discriminated union), confirmed by
+  reading the actual code, not assumed from the pattern holding for prior additions.
+- `routes/export.py`'s `_extract_best_line` iterates via `generator.slide_text()`,
+  which gained a `ConversationSlide` branch — no special-casing needed there either.
+- **Masthead number logic is unaffected** — `next_masthead_number()` counts
+  `MemoryRecord`s by category/status only, never inspects `slides` at all (re-confirmed
+  by reading `models/memory.py`, not assumed from #32's prior finding).
+- **`brief.slide_count` needed a real fix, not just the new role appended** —
+  `validator.py`'s `_check_format` compares `len(post.slides)` against
+  `brief.slide_count` exactly; adding a role without updating slide-count math would
+  have made every carousel post fail validation with a false "expected N, got N+1"
+  error. Fixed at the source: `brief_builder.py`'s `_default_slide_count` (4→5
+  teaching, 3→4 non-teaching) and `paste_link.py`'s `_SLIDE_COUNT[CAROUSEL]` (3→4) —
+  paste-link carousels go through `_brief_system_prompt`'s format-only branch too
+  (never through the angle engine or its approach restriction), so they get
+  `carousel_conversation` exactly the same as taxonomy-driven carousels.
+- **22 existing tests broke and were fixed as a direct, necessary consequence** of the
+  slide-count/shape change (same classification as #26's precedent) — updated fixture
+  JSON, expected role lists, and hardcoded slide counts across `test_generator.py`,
+  `test_brief_builder.py`,`test_paste_link.py`, `test_validator.py`,
+  `test_generate_route.py`, `test_generate_route_http.py`. One of those fixes
+  corrected a latent false-positive: `test_generate_from_brief_route_handles_non_taxonomy_topic_id`
+  was passing before this round for the wrong reason — its `slide_count`/draft-JSON
+  fixture was already one slide short of matching real roles, silently absorbed by
+  `_build_slide()`'s `.get()`-with-empty-default fallback rather than raising; now
+  fixed to genuinely match.
+
+**Local verification (no `/generate` calls, as instructed):**
+- `npx tsc --noEmit`: clean, exit 0.
+- Full backend suite: **127/127 passing** (126 + 1 new test —
+  `test_draft_post_fills_conversation_slide_label_and_invite_from_defaults_not_llm`).
+- Direct prompt-string check (no API calls): `carousel_conversation` present in the
+  rendered carousel system prompt (role list, field example, and the new arc-
+  instruction guidance), completely absent from the single_image prompt.
+- **Rendered the new template through the real Satori path** — started a local `next
+  dev` server, `POST`ed directly to `/api/render` with `template_id:
+  "carousel_conversation"` and the same fixture content as the preview page: `200`,
+  valid `1080×1350` PNG. A `carousel_closing` render was also re-checked as a
+  regression control: still `200`, still valid. Dev server stopped afterward.
+
+**A real bug found by that render, not by any structural check:** the fixed label's
+🌿 emoji has **no glyph in this project's locked font set** (Archivo Black / Alex
+Brush / Inter — `blueprint.md`'s locked Google Fonts, per `lib/fonts.ts`) and renders
+as tofu (`??`) through Satori. Confirmed visually from the actual rendered PNG, not
+inferred. Not fixed in this pass — reported plainly rather than altering the fixed
+brand copy unilaterally; fixed in the immediate follow-up below.
+
+**Status at the time: still OPEN/EXPERIMENTAL — and carrying a genuine structural risk
+the prior six rounds didn't.** This is the first change in the #39 line of work that
+isn't reversible by editing prompt strings alone; a decision to back it out would mean
+removing a slide type and its ripple fixes, not just deleting a paragraph. No live
+`/generate` call has been run against it — real testing happens through the live app
+next, not through this session, per explicit instruction.
+
+### Round 7 follow-up — glyph fix, verified against the real font files, not guessed
+
+**Tested four candidates in the requested order, against the actual bundled font
+files, through real `/api/render` calls — not assumed from any one of them "probably"
+working:** em dash (—), middot (·), hedera/floral heart (❧), star (✦). **All four
+rendered as tofu**, confirmed visually from each actual rendered PNG in turn. Before
+concluding the font itself was the cause, ruled out a transmission/encoding artifact
+in the test method: a plain ASCII asterisk (`*`) rendered correctly through the exact
+same request path, confirming the pipeline and the test method were both fine — the
+four requested candidates themselves have no glyph in this project's bundled Inter
+TTF (`public/fonts/Inter-*.ttf` — appears to be a Latin-subset export with no extended
+Unicode punctuation, not just no emoji coverage).
+
+**None of the four specified candidates passed**, so a fifth, ASCII-safe option was
+tried and verified rather than forcing a broken glyph through: a plain hyphen (`-`),
+closest in spirit to the em dash that was first choice. Rendered cleanly, confirmed
+visually. **Fixed label: `"- Conversation for today"`** (was `"🌿 Conversation for
+today"`) — updated in `models/post.py`'s `ConversationSlide.label` default,
+`lib/placeholder-content.ts`'s `PLACEHOLDER_CONVERSATION`, and the corresponding test
+assertion in `test_generator.py`. `blueprint.md` and `CLAUDE.md`'s round-7 notes
+updated to match rather than left describing the now-fixed emoji version.
+
+**Verified, same rigor as the original finding:** each of the 4 failing candidates and
+the 2 passing ones (ASCII asterisk, ASCII hyphen) rendered through a real local `next
+dev` server and real `/api/render` `POST` calls, `200` responses, each PNG visually
+inspected directly — not inferred from HTTP status alone. Full backend suite re-run
+after the fix: **127/127 passing**. `npx tsc --noEmit`: clean.
+
+**Not a blueprint deviation beyond what round 7 itself already is** — this is a bug
+fix within the same structural addition, not a new design decision.
+
 ---
 
 ## Summary — deviations from the original design docs
@@ -2202,4 +2374,4 @@ fully contained rather than just found in two of however many places it could su
 | 30 | `voice_samples.direct` rewritten to be domain-diverse instead of the originally "Locked" (blueprint Section 4) workplace-themed 5 samples | Live-repro-confirmed as the dominant driver of content drift (accepted angles pivoting to invented office/meeting scenarios) — the locked value was actively working against the product's own quality goal |
 | 32 | Masthead shows only `masthead_short` ("WGS") — the `{category} NO. {n}` text and its rule/separator, specified in blueprint Section 12, are no longer rendered | Explicit request to simplify what she sees on every slide; backend computation is untouched, so this is reversible in one file |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
-| 39 | **OPEN/EXPERIMENTAL, 5 real-output review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; round 5, found by direct prose review rather than structural testing, fixed a second reader-address leak — refine dropping an unhedged question into the anchor-introduction body slide, same root ambiguity (approach-fidelity naming no location for its required question) as the closing-question bug, same #29/#37 two-layer fix pattern applied to a new location | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; two separate reader-address leaks now fixed via the same pattern — still not formally closed, worth checking for a third leak location before the deferred quality read |
+| 39 | **OPEN/EXPERIMENTAL, 7 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues found via prose review and real organic use; round 7 added a real new `carousel_conversation` slide (CTA/question, matching the locked v1 reference) — the line's first **structural**, not prompt-only, change, bumping carousel's slide count for the first time (4–5, not 3–4); a real render-time glyph gap (label's emoji had no glyph in the locked font set, nor did 3 other Unicode alternatives tried) found and fixed same-round, verified against the actual font files, landing on a plain ASCII hyphen | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; round 7 is implementation/local-verification only, not yet run through a real `/generate` call |

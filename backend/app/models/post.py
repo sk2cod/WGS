@@ -13,6 +13,7 @@ SlideRole = Literal[
     "carousel_body",
     "carousel_body_teaching",
     "carousel_closing",
+    "carousel_conversation",
     "single_quote",
     "single_stat",
 ]
@@ -49,6 +50,25 @@ class ClosingSlide(BaseModel):
     handle: str = ""
 
 
+class ConversationSlide(BaseModel):
+    """First structural (not prompt-only) change in the #39 v1 line of work
+    (logbook #39, round 7) — the real CTA/question slide, matching the locked
+    hand-written v1 reference format. Carousel-only, appended after
+    carousel_closing. label and invite are fixed brand copy, not model-generated
+    (same pattern as ClosingSlide.signature/cta/handle) — only question is ever
+    asked of the model.
+
+    label originally used a leading emoji; verified via real Satori renders that
+    this project's bundled Inter TTF has no glyph for it (nor for em dash,
+    middot, or hedera/star alternatives tried) -- all rendered as tofu. Plain
+    ASCII hyphen confirmed rendering cleanly (logbook #39, glyph fix)."""
+
+    template_id: Literal["carousel_conversation"] = "carousel_conversation"
+    label: str = "- Conversation for today"
+    question: str          # the only LLM-authored field on this slide
+    invite: str = "I'd love to hear it."
+
+
 class QuoteSlide(BaseModel):
     template_id: Literal["single_quote"] = "single_quote"
     quote: str
@@ -62,7 +82,15 @@ class StatSlide(BaseModel):
 
 
 Slide = Annotated[
-    Union[CoverSlide, BodySlide, BodyTeachingSlide, ClosingSlide, QuoteSlide, StatSlide],
+    Union[
+        CoverSlide,
+        BodySlide,
+        BodyTeachingSlide,
+        ClosingSlide,
+        ConversationSlide,
+        QuoteSlide,
+        StatSlide,
+    ],
     Field(discriminator="template_id"),
 ]
 

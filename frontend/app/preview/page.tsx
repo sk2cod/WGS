@@ -7,6 +7,7 @@ import {
   PLACEHOLDER_BODY,
   PLACEHOLDER_BODY_TEACHING,
   PLACEHOLDER_CLOSING,
+  PLACEHOLDER_CONVERSATION,
   PLACEHOLDER_QUOTE,
   PLACEHOLDER_STAT,
 } from "@/lib/placeholder-content";
@@ -14,6 +15,7 @@ import CarouselCover from "@/components/slides/CarouselCover";
 import CarouselBody from "@/components/slides/CarouselBody";
 import CarouselBodyTeaching from "@/components/slides/CarouselBodyTeaching";
 import CarouselClosing from "@/components/slides/CarouselClosing";
+import ConversationSlide from "@/components/slides/ConversationSlide";
 import SingleQuote from "@/components/slides/SingleQuote";
 import SingleStat from "@/components/slides/SingleStat";
 import ScaledSlide from "@/components/ui/ScaledSlide";
@@ -32,7 +34,7 @@ export default function PreviewPage() {
     >
       <h1 style={{ marginBottom: 4 }}>Template Preview</h1>
       <p style={{ marginBottom: 32, opacity: 0.7 }}>
-        All 6 templates × all 3 moods, dummy WGS copy. Layout, fonts, and
+        All 7 templates × all 3 moods, dummy WGS copy. Layout, fonts, and
         masthead should stay identical across a row — only the duotone pair
         and accent color shift.
       </p>
@@ -93,6 +95,17 @@ export default function PreviewPage() {
               masthead={PLACEHOLDER_MASTHEAD}
               tokens={resolveTokens(WGS_BRAND_KIT, mood)}
               {...PLACEHOLDER_CLOSING}
+            />
+          </ScaledSlide>
+        ))}
+
+        <RowLabel>Conversation</RowLabel>
+        {MOODS.map((mood) => (
+          <ScaledSlide key={mood} scale={SCALE}>
+            <ConversationSlide
+              masthead={PLACEHOLDER_MASTHEAD}
+              tokens={resolveTokens(WGS_BRAND_KIT, mood)}
+              {...PLACEHOLDER_CONVERSATION}
             />
           </ScaledSlide>
         ))}

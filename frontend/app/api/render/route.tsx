@@ -5,12 +5,14 @@ import CarouselCover from "@/components/slides/CarouselCover";
 import CarouselBody from "@/components/slides/CarouselBody";
 import CarouselBodyTeaching from "@/components/slides/CarouselBodyTeaching";
 import CarouselClosing from "@/components/slides/CarouselClosing";
+import ConversationSlide from "@/components/slides/ConversationSlide";
 import SingleQuote from "@/components/slides/SingleQuote";
 import SingleStat from "@/components/slides/SingleStat";
 import type {
   CarouselBodyContent,
   CarouselBodyTeachingContent,
   CarouselClosingContent,
+  CarouselConversationContent,
   CarouselCoverContent,
   RenderRequestBody,
   SingleQuoteContent,
@@ -81,6 +83,11 @@ export async function POST(req: NextRequest) {
     case "carousel_closing": {
       const c = content as CarouselClosingContent;
       element = <CarouselClosing masthead={masthead} tokens={tokens} {...c} />;
+      break;
+    }
+    case "carousel_conversation": {
+      const c = content as CarouselConversationContent;
+      element = <ConversationSlide masthead={masthead} tokens={tokens} {...c} />;
       break;
     }
     case "single_quote": {

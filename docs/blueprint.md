@@ -294,6 +294,8 @@ Sampling within one topic solves *depth*. **Breadth** — actually walking all 4
 
 **Phase 1 formats (two):**
 - **Carousel** — **3–4 slides max** (tightened from the original 5–6: forces a tight cover → body → takeaway skeleton, cuts generation cost, and reads better — carousels rarely need more to make one point well).
+
+**Note:** as of logbook #39 round 7, carousel gained a real structural addition on top of the above — a `carousel_conversation` slide appended after the closing (4–5 slides now, not 3–4), the first structural (not prompt-only) change in the v1 content-voice experiment. See the logbook for why and its current status.
 - **Single image** — absorbs the quote card; one punchy stat/quote/insight.
 
 **Canvas:** default **1080×1350 (4:5)** — fills the most feed space on mobile. Every template is designed with a **centered 3:4 safe zone** for text, faces, and logos, because Instagram's profile grid now crops previews to roughly 3:4 even though the feed itself shows up to 4:5 — this keeps the grid looking intentional without sacrificing feed height. (Not a hard requirement to revisit now — noted so it's not lost.)
@@ -472,6 +474,8 @@ A small structural row at the top of every slide: **`{masthead_short}` — rule 
 | S2 | Single image — stat | No | Masthead, small kicker label, huge number in the structural font, one supporting line |
 
 Only the cover carries a photo — interior and single-image formats are entirely typographic, which is both the more professional editorial look and the reason single-image posts and carousel interiors cost effectively nothing to generate. All five read from `BrandKit` tokens (mood palette, fonts, text/background color) so nothing is hardcoded per template — a palette or mood change re-skins the whole system. All designed inside the 3:4 safe zone (Section 6).
+
+**Note:** as of logbook #39 round 7, a sixth carousel template exists on top of the five above — `carousel_conversation`, the real CTA/question slide (masthead pinned top; a fixed `- Conversation for today` label, one model-written open question tied to the post's anchor, a fixed `I'd love to hear it.` invite, same masthead-plus-centered-content layout convention as the closing slide below), appended after C3 for every carousel post regardless of approach. This is a carousel-only, deliberately experimental structural addition — see the logbook for full detail. The label originally led with a 🌿 emoji; verified via real Satori renders that this project's locked font set (Archivo Black / Alex Brush / Inter) has no glyph for it, nor for em dash/middot/hedera/star alternatives tried — fixed by switching to a plain ASCII hyphen, confirmed rendering cleanly the same way.
 
 **On the closing slide's handle:** every slide already carries `masthead_short` ("WGS") at the top, but that alone isn't enough to find and follow the account if a slide is screenshotted and shared outside Instagram — so the closing slide's footnote spells out the full `handle` (`@womensgrowthsociety`) as the one place it appears in full. The CTA sentence above it is set at real body-copy weight, not squeezed into the small letter-spaced label style used for the footnote — a full sentence in that tighter styling reads as fine print, not a call to action.
 

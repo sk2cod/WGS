@@ -2,6 +2,7 @@ import type {
   CarouselBodyContent,
   CarouselBodyTeachingContent,
   CarouselClosingContent,
+  CarouselConversationContent,
   CarouselCoverContent,
   MastheadInfo,
   SingleQuoteContent,
@@ -40,6 +41,18 @@ export const PLACEHOLDER_CLOSING: CarouselClosingContent = {
   signature: "with you,",
   cta: WGS_BRAND_KIT.signature_cta ?? "",
   handle: WGS_BRAND_KIT.handle,
+};
+
+// logbook #39, round 7 -- label/invite are fixed brand copy, only question is
+// ever asked of the model (same pattern as PLACEHOLDER_CLOSING's cta/handle).
+// label originally led with an emoji; verified via real Satori renders that
+// this project's bundled Inter TTF has no glyph for it (nor for em dash,
+// middot, or hedera/star alternatives tried) -- plain ASCII hyphen confirmed
+// rendering cleanly instead (logbook #39, glyph fix).
+export const PLACEHOLDER_CONVERSATION: CarouselConversationContent = {
+  label: "- Conversation for today",
+  question: "What's one thing you're finally letting yourself put down?",
+  invite: "I'd love to hear it.",
 };
 
 export const PLACEHOLDER_QUOTE: SingleQuoteContent = {

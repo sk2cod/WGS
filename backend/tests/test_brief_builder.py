@@ -38,12 +38,13 @@ def test_build_brief_resolves_poetic_register_for_story_approach():
         memory=[],
     )
     assert result.brief.brand_voice_samples == WGS_BRAND_KIT.voice_samples.poetic
-    # story is a TEACHING_BODY_APPROACHES approach: cover + 2 teaching body + closing
-    assert result.brief.slide_count == 4
+    # story is a TEACHING_BODY_APPROACHES approach: cover + 2 teaching body +
+    # closing + conversation (logbook #39 round 7)
+    assert result.brief.slide_count == 5
     assert result.masthead == "WGS — MINDSET NO. 01"
 
 
-def test_build_brief_carousel_slide_count_is_3_for_non_teaching_approach():
+def test_build_brief_carousel_slide_count_is_4_for_non_teaching_approach():
     topics_by_id = get_topics_by_id()
     result = build_brief(
         topic_id="mindset-self-doubt",
@@ -55,8 +56,9 @@ def test_build_brief_carousel_slide_count_is_3_for_non_teaching_approach():
         brand_kit=WGS_BRAND_KIT,
         memory=[],
     )
-    # question_reflection isn't in TEACHING_BODY_APPROACHES: cover + 1 body + closing
-    assert result.brief.slide_count == 3
+    # question_reflection isn't in TEACHING_BODY_APPROACHES: cover + 1 body +
+    # closing + conversation (logbook #39 round 7)
+    assert result.brief.slide_count == 4
 
 
 def test_build_brief_resolves_direct_register_for_educational_approach():
