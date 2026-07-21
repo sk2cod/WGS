@@ -910,8 +910,10 @@ beat/idea distinctness, not literal wording, so rewording a beat for its
 own slide doesn't reintroduce a duplicate-beat problem as long as the same
 underlying beat structure is preserved.
 
-**Not yet shipped as of this writing** — tested and ready; see Section 13
-for exact current state.
+**Shipped** as commit `ae529a0` — verified live via a real, unmocked
+production `POST /poc/generate` call: slides and caption carried the same
+beats/anchor/order with clearly distinct wording throughout, no verbatim or
+near-verbatim overlap.
 
 ---
 
@@ -1034,17 +1036,14 @@ variant in any round to date.
   reads as redundant, and it contradicted the caption's original "second
   telling" design intent). The revision keeps caption-first (proven to fix
   quality) but requires slides to retell the caption's beats in fresh
-  wording rather than copy them. Verified across three real trials — same
-  beats/anchor/order as the caption, no verbatim or near-verbatim sentence
-  reuse in any trial. **Tested and ready, not yet shipped as of this
-  writing.** Whoever picks this up next should confirm via `git log` and
-  `git status` whether it has since been committed and pushed — this line
-  needs the same close-the-loop update the project's own logbook discipline
-  requires if it's stale by the time it's read.
-- **Punctuation/pacing and selective slide line breaks are tested and ready,
-  not yet shipped** (Section 14) — rules 12/13 added to `prompt.py`,
-  `PocParagraphSlide.tsx` updated to render line breaks. Same
-  not-yet-shipped status and close-the-loop caveat as the bullet above.
+  wording rather than copy them. **Shipped as commit `ae529a0`** — verified
+  live via a real production call, slides and caption carrying the same
+  beats/anchor/order with clearly distinct wording, no verbatim overlap.
+- **Punctuation/pacing and selective slide line breaks, shipped in the same
+  commit `ae529a0`** (Section 14) — rules 12/13 added to `prompt.py`,
+  `PocParagraphSlide.tsx` updated to render line breaks. Verified live in
+  the same production call: clean punctuation, zero line breaks fired
+  (compliant default).
 
 ---
 
@@ -1101,8 +1100,9 @@ every trial — no comma splices, no run-on sentences, appropriate em dash use
 for turns. No line breaks fired in any of the post-fix trials, consistent
 with the new hard cap.
 
-**Not yet shipped as of this writing** — tested and ready; see Section 13
-for current-state status.
+**Shipped** as commit `ae529a0`, same commit as Section 11's round-2 fix —
+verified live via the same production call: punctuation read cleanly, zero
+line breaks fired (compliant, expected default).
 
 ---
 
