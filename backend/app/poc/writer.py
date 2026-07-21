@@ -6,6 +6,7 @@ import from, and is not imported by, anything in the existing generation pipelin
 
 from __future__ import annotations
 
+from app.poc.openai_provider import run_poc_writer_openai
 from app.poc.prompt import build_poc_system_prompt
 from app.poc.prompt_gpt_variant import build_gpt_variant_system_prompt
 from app.providers.llm import LLMProvider, strip_json_fence
@@ -35,18 +36,34 @@ def run_poc_writer(
     llm: LLMProvider | None = None,
     recent_anchors: list[str] | None = None,
     variant: str = "current",
+    provider: str = "openai",
 ) -> str:
-    """Makes the one Sonnet call and returns the raw JSON text (fence-stripped,
-    not yet parsed) — what "the raw JSON result" means for both callers.
+    """Makes the one model call and returns the raw JSON text (fence-stripped,
+    not yet parsed) — what "the raw JSON result" means for every caller.
+
+    `provider` selects which model backend to use — "openai" (the default as of
+    the gpt-5.5 A/B test, gpt-5.5 via app.poc.openai_provider — chosen on real
+    evidence: it avoided two unhedged/questionable-anchor failures Claude
+    produced on identical topics, and showed tighter beat-count discipline; see
+    docs/direct-write-poc.md) or "anthropic" (Claude via LLMProvider — still
+    fully functional, unchanged, available any time by passing provider=
+    "anthropic" explicitly, e.g. once Anthropic credits are restored and
+    comparison testing continues).
 
     `variant` selects which system prompt to use — "current" (app/poc/prompt.py,
     the default, unchanged behavior for every existing caller) or "gpt"
     (app/poc/prompt_gpt_variant.py, GPT's editorial-workflow architecture, for
-    A/B comparison only). `recent_anchors` is a test-harness knob only (see
-    FINDINGS.md #1) — an in-memory list passed manually per test batch, not a
-    persisted/production mechanism. Appended to the user turn (not the verbatim
-    system prompt) so the fixed system prompt text stays byte-for-byte as
-    handed over."""
+    A/B comparison only). Applies to both providers. `recent_anchors` is a
+    test-harness knob only (see FINDINGS.md #1) — an in-memory list passed
+    manually per test batch, not a persisted/production mechanism. Appended to
+    the user turn (not the verbatim system prompt) so the fixed system prompt
+    text stays byte-for-byte as handed over."""
+    if provider == "openai":
+        return run_poc_writer_openai(topic, recent_anchors=recent_anchors, variant=variant)
+    if provider != "anthropic":
+        raise ValueError(f"Unknown provider: {provider!r} (expected 'anthropic' or 'openai')")
+
+    # --- Anthropic path — unchanged from before `provider` existed ---
     if variant not in _PROMPT_BUILDERS:
         raise ValueError(f"Unknown variant: {variant!r} (expected 'current' or 'gpt')")
     llm = llm or LLMProvider()

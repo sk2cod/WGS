@@ -7,11 +7,16 @@ Usage (from backend/):
     uv run python scripts/poc_writer.py "a topic string, e.g. Boundaries"
     uv run python scripts/poc_writer.py "Boundaries" --exclude-anchors "kintsugi,segmented sleep"
     uv run python scripts/poc_writer.py "Boundaries" --variant gpt
+    uv run python scripts/poc_writer.py "Boundaries" --provider anthropic
 
 --exclude-anchors is a test-harness-only knob (see app/poc/FINDINGS.md #1) — an
 in-memory list you pass by hand per batch, not a persisted mechanism.
 --variant selects which system prompt to use: "current" (default, app/poc/prompt.py)
 or "gpt" (app/poc/prompt_gpt_variant.py, for A/B comparison only).
+--provider selects which model backend to use: "openai" (default as of the
+gpt-5.5 A/B test — real evidence in docs/direct-write-poc.md, requires
+OPENAI_API_KEY_POC in .env) or "anthropic" (Claude, still fully functional,
+unchanged — pass explicitly to use it).
 """
 
 from __future__ import annotations
@@ -41,12 +46,20 @@ def main() -> None:
         default="current",
         help="Which system prompt to use (default: current)",
     )
+    parser.add_argument(
+        "--provider",
+        choices=["anthropic", "openai"],
+        default="openai",
+        help="Which model backend to use (default: openai, gpt-5.5)",
+    )
     args = parser.parse_args()
 
     topic = " ".join(args.topic)
     recent_anchors = [a.strip() for a in args.exclude_anchors.split(",") if a.strip()] or None
 
-    raw_json = run_poc_writer(topic, recent_anchors=recent_anchors, variant=args.variant)
+    raw_json = run_poc_writer(
+        topic, recent_anchors=recent_anchors, variant=args.variant, provider=args.provider
+    )
     print(raw_json)
 
 

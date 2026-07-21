@@ -1,8 +1,11 @@
 # The direct-write POC — full reasoning, from v1 through the GPT-variant rejection
 
 **Status: active, unverified experiment.** Committed and pushed, live at `/poc`
-(`POST /poc/generate`, `backend/app/poc/`). Not a replacement for the real
-`/generate` pipeline — a comparison path, evaluated in isolation. Companion to
+(`POST /poc/generate`, `backend/app/poc/`). **Default model provider is
+`gpt-5.5` (OpenAI)** as of Section 9 — chosen on real A/B evidence over the
+original Claude/Sonnet path, which remains fully functional via
+`provider="anthropic"`. Not a replacement for the real `/generate` pipeline —
+a comparison path, evaluated in isolation. Companion to
 `docs/logbook.md` (the shipped-pipeline record, untouched by any of this) and
 `backend/app/poc/FINDINGS.md` (this POC's own short bug-tracking log). Written
 so a fresh chat with no other context can read this cold and pick the work back
@@ -206,14 +209,15 @@ the sampling machinery itself may have been fighting against, not enabling,
 the quality the arc-instruction rewrite was actually trying to reach.
 
 The POC is deliberately minimal by design (`backend/scripts/poc_writer.py`,
-`backend/app/routes/poc.py`, `backend/app/poc/`): one Sonnet call, the POC
+`backend/app/routes/poc.py`, `backend/app/poc/`): one model call, the POC
 prompt, a topic string in, raw JSON out. No Haiku pre-step, no
 critique/refine loop, no validator, no memory writes. It does not import
 from, and is not imported by, anything in the real pipeline
 (`engine/generator.py`, `engine/angle_engine.py`, `routes/generate.py`) —
 confirmed by direct grep at build time, re-confirmed by a clean `git diff`
 showing only additive changes to `main.py`/`page.tsx` and otherwise entirely
-new files.
+new files. (Originally Claude/Sonnet exclusively; a second, optional OpenAI
+backend was added later and is now the default — see Section 9.)
 
 ---
 
@@ -224,7 +228,7 @@ This is `backend/app/poc/prompt.py`'s `POC_SYSTEM_PROMPT_TEMPLATE`, the
 (`--variant current`, the default). It already includes the rule-2
 multi-candidate anchor-verification rewrite and the rule-9 duplicate-beat
 diagnostic — both landed after real testing found the earlier versions
-insufficient (Section 8 and Section 9 below).
+insufficient (Section 7 and Section 10 below).
 
 ```
 You are the writer for Women's Growth Society (WGS) — for women in their 20s-40s
@@ -434,7 +438,7 @@ against what real testing had already surfaced.
   the prompt above) keeps the "generate several real candidates, discard the
   ones you're not confident about" mechanism but drops the explicit
   multi-axis scoring rubric — just "is this genuinely real and documented,"
-  not "does this score well on six dimensions." Section 9 below is the
+  not "does this score well on six dimensions." Section 8 below is the
   direct empirical reason that scaling-down decision held up.
 
 **Declined, and not folded in anywhere:**
@@ -458,7 +462,7 @@ against what real testing had already surfaced.
   actual generated prose**, never by anything checklist- or rubric-shaped.
   Building more invisible-checklist machinery, even a cleverer one, was
   judged unlikely to fix a problem that structural machinery has already
-  been shown not to fix. This reasoning was not left untested — Section 9
+  been shown not to fix. This reasoning was not left untested — Section 8
   is the actual A/B test built specifically to check whether this reasoning
   was right.
 
@@ -569,7 +573,86 @@ this directly, not just this document.
 
 ---
 
-## 9. Testing results summary across all POC rounds
+## 9. The gpt-5.5 default-provider decision
+
+A second, optional model backend — `gpt-5.5` via OpenAI, isolated behind its
+own `OPENAI_API_KEY_POC` environment variable and its own module
+(`backend/app/poc/openai_provider.py`) — was added alongside the original
+Claude/Sonnet path. It sends the exact same, unmodified system prompt content
+from `backend/app/poc/prompt.py` (Section 6 above) to `gpt-5.5` via OpenAI's
+structured/JSON-schema output mode, so the two providers are a genuine
+apples-to-apples comparison: same prompt, same instructions, only the model
+underneath changes.
+
+**A/B tested on 5 real topics** — Self-Doubt, Pay-scale, and Perfectionism
+(direct head-to-head against real, already-captured Claude output on the
+identical topics) plus two fresh topics (Sleep, Motivational). Before any
+trial ran, `gpt-5.5` accessibility was explicitly confirmed via a
+`models.retrieve()` call — no assumption, no silent fallback to a different
+model.
+
+**Result: gpt-5.5 is now the default POC provider**, changed in
+`run_poc_writer()`, the script's `--provider` flag, and
+`POST /poc/generate`'s request body — all three now default to `"openai"`.
+This is a decision made on real evidence, not a workaround for the Anthropic
+credit issue that blocked the GPT-architecture-variant testing in Section 8:
+
+- **It avoided two unhedged/questionable-anchor failures Claude produced on
+  identical topics.** On Pay-scale, Claude's anchor — "medieval guild
+  journeyman wage ladders" — was a specific, unhedged institutional claim in
+  the same shape as the Damascus-apprentice-ladder failure (Section 10).
+  gpt-5.5's anchor for the same topic — the actual U.S. federal **General
+  Schedule pay table** — is not even a historical claim; it's a live,
+  checkable, contemporary system. On Perfectionism, Claude's anchor — "Persian
+  rug weavers' deliberate flaw" — is the specific anchor flagged elsewhere in
+  this document as possibly folklore rather than documented practice.
+  gpt-5.5's anchor for the same topic — early printed-book errata pages — is
+  uncontroversial, well-documented printing history.
+- **It showed tighter beat-count discipline.** 6 slides in 3 of 5 trials,
+  versus Claude's near-uniform landing at 7 across roughly 20 of 22 trials
+  logged in this document (Section 10). The prompt's own rule 9 says "however
+  many beats this specific story genuinely needs... do not pad" — gpt-5.5's
+  willingness to stop at 6 tracks that instruction more literally than
+  Claude's consistent maxing-out at 7.
+
+**The Anthropic path is fully preserved, not removed or degraded.** Passing
+`provider="anthropic"` explicitly (`--provider anthropic` on the script,
+`"provider": "anthropic"` on the route) still works exactly as it did before
+this default changed — confirmed by a mocked-call check showing the Claude
+code path is byte-identical to before. This matters because Anthropic credits
+will presumably be restored at some point, and the comparison started in this
+section (and the rejected GPT-architecture variant in Section 8) may continue.
+
+**Two findings, unresolved by the model switch — real, still open:**
+
+1. **No trial from either model, across every round in this document,
+   established a named, intimate relationship in its opening.** Both models
+   consistently produce concrete, sensory, specific scenes (gpt-5.5's
+   "phone face down" at 3:12, Claude's compass-calibration ritual) — but the
+   *person* in that scene is always anonymous ("she," "he," "the
+   proofreader," "a sailor"), never named, never placed in a relationship
+   with someone else the way v1/v2's own reference examples do (the
+   grandmother in the mad-money example, "she" and the narrator in the amae
+   example). This is a real gap in both models' output relative to the
+   reference material they're meant to be matching, not something switching
+   providers fixed.
+2. **A real cross-model anchor convergence was found.** gpt-5.5's Sleep trial
+   landed on "first sleep and second sleep" — the identical underlying
+   historical phenomenon as an earlier Claude trial's "segmented sleep" (a
+   different topic_id, from several rounds earlier in this document). This
+   wasn't a same-session repeat for either model individually — it's two
+   independent models, on two different occasions, converging on the same
+   well-known historical fact. This suggests the anchor-repetition problem
+   (Section 11, `FINDINGS.md` #1) may not be purely a per-model quirk to
+   route around by switching providers — there may be a small pool of
+   maximally "famous," high-scoring anchors (kintsugi for Claude, first/second
+   sleep for both) that any sufficiently capable model gravitates toward
+   regardless of which one is asked. If true, a real fix needs to account for
+   convergence across models, not just repetition within one model's calls.
+
+---
+
+## 10. Testing results summary across all POC rounds
 
 Combined across every round of testing the direct-write POC prompt has been
 through this session (not counting the GPT variant, covered separately
@@ -631,7 +714,7 @@ variant in any round to date.
 
 ---
 
-## 10. Current state, explicitly
+## 11. Current state, explicitly
 
 - The POC is committed and pushed, live at `/poc` on `wgs-studio.vercel.app`,
   backed by `POST /poc/generate` on the Railway backend.
@@ -652,16 +735,32 @@ variant in any round to date.
   only (`backend/app/poc/FINDINGS.md` #1) — not a resolution.
 - **A "hedge attributed reasons/motivations" refinement was offered and
   deferred**, in favor of testing the UI first — the refined diagnosis in
-  Section 9 (real anchors, unverified attached reasons) suggests rule 2 or
+  Section 10 (real anchors, unverified attached reasons) suggests rule 2 or
   rule 4 could be tightened further to specifically hedge the *reasoning*
   layered onto a real anchor, not just the anchor's existence. **Still
   open, not attempted.**
 - The GPT-architecture variant is evaluated and rejected (Section 8),
   `prompt_gpt_variant.py` kept for reference only.
+- **`gpt-5.5` (OpenAI) is now the default POC model provider** (Section 9),
+  changed on real A/B evidence. Confirmed by direct trace, not assumed: the
+  frontend (`frontend/lib/poc-api.ts`'s `generatePoc()`) sends only
+  `{topic_id}` — no `provider` field at all — so the "Generate POC" button's
+  behavior depends entirely on the backend default. A real, unmocked call
+  through the route using that exact request shape returned genuine `gpt-5.5`
+  output, confirming the button now reaches `gpt-5.5` without any frontend
+  change. `provider="anthropic"` remains fully functional, unchanged, for
+  explicit use.
+- **Two findings from the gpt-5.5 A/B test are unresolved by the model
+  switch** (Section 9): neither model has produced an opening with a named,
+  intimate relationship (only anonymous, if concrete and sensory, scenes);
+  and a real cross-model anchor convergence (gpt-5.5's "first/second sleep"
+  vs. an earlier Claude trial's "segmented sleep") suggests anchor
+  repetition may need a fix that accounts for convergence across models, not
+  just within one.
 
 ---
 
-## 11. What a fresh chat should pick up next
+## 12. What a fresh chat should pick up next
 
 1. **Real UI testing of the POC**, now that the layout bug is fixed — this
    hasn't happened yet; every round of testing so far has gone through the
@@ -676,8 +775,8 @@ variant in any round to date.
    coverage/non-repetition machinery, the six-template render contract) —
    those constraints haven't been re-evaluated against a direct-write
    approach at all yet.
-3. **The deferred "hedge attributed reasons" refinement** (Section 10) is
-   sitting there as a candidate next fix, informed by Section 9's refined
+3. **The deferred "hedge attributed reasons" refinement** (Section 11) is
+   sitting there as a candidate next fix, informed by Section 10's refined
    diagnosis, if POC testing continues before the integration decision.
 4. **Anchor repetition** still has no real fix, only the manual test-harness
    stopgap — worth real attention if the POC direction is chosen to continue

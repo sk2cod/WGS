@@ -29,6 +29,10 @@ class PocGenerateRequest(BaseModel):
     # "current" (default, app/poc/prompt.py) or "gpt" (app/poc/prompt_gpt_variant.py)
     # — A/B comparison only, does not change behavior for any existing caller.
     variant: Literal["current", "gpt"] = "current"
+    # "openai" (default as of the gpt-5.5 A/B test — see docs/direct-write-poc.md
+    # for the real evidence behind this default) or "anthropic" (Claude — still
+    # fully functional, unchanged, available by passing this explicitly).
+    provider: Literal["anthropic", "openai"] = "openai"
 
 
 class PocGenerateResponse(BaseModel):
@@ -47,7 +51,10 @@ def poc_generate(req: PocGenerateRequest) -> PocGenerateResponse:
         raise HTTPException(status_code=404, detail=f"Unknown topic_id: {req.topic_id!r}")
 
     raw_json = run_poc_writer(
-        topic.name, recent_anchors=req.recent_anchors or None, variant=req.variant
+        topic.name,
+        recent_anchors=req.recent_anchors or None,
+        variant=req.variant,
+        provider=req.provider,
     )
     try:
         parsed = json.loads(raw_json)
