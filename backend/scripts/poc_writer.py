@@ -6,9 +6,12 @@ deliberately isolated from the real pipeline (engine/generator.py, engine/angle_
 Usage (from backend/):
     uv run python scripts/poc_writer.py "a topic string, e.g. Boundaries"
     uv run python scripts/poc_writer.py "Boundaries" --exclude-anchors "kintsugi,segmented sleep"
+    uv run python scripts/poc_writer.py "Boundaries" --variant gpt
 
 --exclude-anchors is a test-harness-only knob (see app/poc/FINDINGS.md #1) — an
 in-memory list you pass by hand per batch, not a persisted mechanism.
+--variant selects which system prompt to use: "current" (default, app/poc/prompt.py)
+or "gpt" (app/poc/prompt_gpt_variant.py, for A/B comparison only).
 """
 
 from __future__ import annotations
@@ -32,12 +35,18 @@ def main() -> None:
         default="",
         help="Comma-separated recently-used anchors to exclude, e.g. 'kintsugi,segmented sleep'",
     )
+    parser.add_argument(
+        "--variant",
+        choices=["current", "gpt"],
+        default="current",
+        help="Which system prompt to use (default: current)",
+    )
     args = parser.parse_args()
 
     topic = " ".join(args.topic)
     recent_anchors = [a.strip() for a in args.exclude_anchors.split(",") if a.strip()] or None
 
-    raw_json = run_poc_writer(topic, recent_anchors=recent_anchors)
+    raw_json = run_poc_writer(topic, recent_anchors=recent_anchors, variant=args.variant)
     print(raw_json)
 
 

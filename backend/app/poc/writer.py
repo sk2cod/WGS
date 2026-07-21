@@ -7,7 +7,16 @@ import from, and is not imported by, anything in the existing generation pipelin
 from __future__ import annotations
 
 from app.poc.prompt import build_poc_system_prompt
+from app.poc.prompt_gpt_variant import build_gpt_variant_system_prompt
 from app.providers.llm import LLMProvider, strip_json_fence
+
+# variant name -> prompt builder. "current" is the default for every existing
+# caller (script with no --variant flag, route with no variant field) — adding
+# "gpt" here does not change behavior for anyone who doesn't ask for it.
+_PROMPT_BUILDERS = {
+    "current": build_poc_system_prompt,
+    "gpt": build_gpt_variant_system_prompt,
+}
 
 # Generous relative to the existing pipeline's draft_post budget (1500 for a fixed
 # ~30-word-per-slide carousel) — these slides are unconstrained flowing paragraphs,
@@ -25,16 +34,23 @@ def run_poc_writer(
     topic: str,
     llm: LLMProvider | None = None,
     recent_anchors: list[str] | None = None,
+    variant: str = "current",
 ) -> str:
     """Makes the one Sonnet call and returns the raw JSON text (fence-stripped,
     not yet parsed) — what "the raw JSON result" means for both callers.
 
-    `recent_anchors` is a test-harness knob only (see FINDINGS.md #1) — an
-    in-memory list passed manually per test batch, not a persisted/production
-    mechanism. Appended to the user turn (not the verbatim system prompt) so
-    the fixed system prompt text stays byte-for-byte as handed over."""
+    `variant` selects which system prompt to use — "current" (app/poc/prompt.py,
+    the default, unchanged behavior for every existing caller) or "gpt"
+    (app/poc/prompt_gpt_variant.py, GPT's editorial-workflow architecture, for
+    A/B comparison only). `recent_anchors` is a test-harness knob only (see
+    FINDINGS.md #1) — an in-memory list passed manually per test batch, not a
+    persisted/production mechanism. Appended to the user turn (not the verbatim
+    system prompt) so the fixed system prompt text stays byte-for-byte as
+    handed over."""
+    if variant not in _PROMPT_BUILDERS:
+        raise ValueError(f"Unknown variant: {variant!r} (expected 'current' or 'gpt')")
     llm = llm or LLMProvider()
-    system = build_poc_system_prompt(topic)
+    system = _PROMPT_BUILDERS[variant](topic)
     user_turn = _USER_TURN
     if recent_anchors:
         user_turn += (

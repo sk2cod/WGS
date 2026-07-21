@@ -10,6 +10,7 @@ existing /generate pipeline is read or written by this file."""
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -25,6 +26,9 @@ class PocGenerateRequest(BaseModel):
     # Test-harness-only knob (see app/poc/FINDINGS.md #1) — an in-memory list the
     # caller passes by hand per test batch, not a persisted/production mechanism.
     recent_anchors: list[str] = []
+    # "current" (default, app/poc/prompt.py) or "gpt" (app/poc/prompt_gpt_variant.py)
+    # — A/B comparison only, does not change behavior for any existing caller.
+    variant: Literal["current", "gpt"] = "current"
 
 
 class PocGenerateResponse(BaseModel):
@@ -42,7 +46,9 @@ def poc_generate(req: PocGenerateRequest) -> PocGenerateResponse:
     if topic is None:
         raise HTTPException(status_code=404, detail=f"Unknown topic_id: {req.topic_id!r}")
 
-    raw_json = run_poc_writer(topic.name, recent_anchors=req.recent_anchors or None)
+    raw_json = run_poc_writer(
+        topic.name, recent_anchors=req.recent_anchors or None, variant=req.variant
+    )
     try:
         parsed = json.loads(raw_json)
     except json.JSONDecodeError as exc:
