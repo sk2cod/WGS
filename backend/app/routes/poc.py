@@ -50,12 +50,24 @@ def poc_generate(req: PocGenerateRequest) -> PocGenerateResponse:
     if topic is None:
         raise HTTPException(status_code=404, detail=f"Unknown topic_id: {req.topic_id!r}")
 
-    raw_json = run_poc_writer(
-        topic.name,
-        recent_anchors=req.recent_anchors or None,
-        variant=req.variant,
-        provider=req.provider,
-    )
+    try:
+        raw_json = run_poc_writer(
+            topic.name,
+            recent_anchors=req.recent_anchors or None,
+            variant=req.variant,
+            provider=req.provider,
+        )
+    except Exception as exc:
+        # An unhandled exception here (e.g. a missing/misconfigured provider
+        # key, a provider API error) would otherwise propagate past
+        # CORSMiddleware to Starlette's ServerErrorMiddleware, which returns a
+        # bare 500 with no CORS headers — the browser then reports a generic
+        # "Failed to fetch" instead of ever surfacing the real error (see
+        # FINDINGS.md #2). Converting to HTTPException keeps the response
+        # inside FastAPI's normal exception handling, which does carry CORS
+        # headers.
+        raise HTTPException(status_code=502, detail=f"POC writer failed: {exc}") from exc
+
     try:
         parsed = json.loads(raw_json)
     except json.JSONDecodeError as exc:

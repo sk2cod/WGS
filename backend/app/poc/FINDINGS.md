@@ -75,3 +75,70 @@ list, and nothing here would scale past a manually-curated handful of
 exclusions. The real fix — state-aware, mirroring the production pipeline's
 `MemoryRecord.fingerprint` check in the angle engine — is still open and still
 not attempted.
+
+---
+
+## 2. RESOLVED — real "Failed to fetch" on the live `/poc` button, caused by a missing Railway env var, compounded by a CORS-masking bug
+
+**Symptom:** clicking "Generate POC" on the live app (`wgs-studio.vercel.app/poc`)
+after `gpt-5.5` became the default provider produced a generic browser
+"Failed to fetch" — no HTTP status, no error detail, the kind of message
+`fetch()` throws on a genuine network-level failure, not a clean HTTP error
+response (same category of symptom as logbook #11 in the main pipeline).
+
+**Investigation:** CORS preflight (`OPTIONS /poc/generate`) checked first and
+was clean — `200`, correct `Access-Control-Allow-Origin`. A real, timed
+`POST` with a matching `Origin` header returned a fast (~0.45s) `500
+Internal Server Error` with **no CORS headers at all** on the response.
+Two separate problems, found in this order:
+
+1. **Root cause: `OPENAI_API_KEY_POC` was never set on Railway.** It was
+   added to the local `backend/.env` file when `openai_provider.py` was
+   built, but — same failure class as logbook #6 in the main pipeline
+   ("Railway env vars only partially applied") — never propagated to the
+   actual production service. `openai_provider._build_client()` correctly
+   raised `RuntimeError("OPENAI_API_KEY_POC is not set...")` exactly as
+   designed, but since `provider` now defaults to `"openai"` and the
+   frontend always omits the field, every real click hit this path in
+   production.
+2. **Compounding bug: the resulting 500 had no CORS headers, so the browser
+   reported "Failed to fetch" instead of a real error.** `routes/poc.py`'s
+   `run_poc_writer(...)` call wasn't wrapped in `try/except` — an unhandled
+   exception there propagates past `CORSMiddleware` (added via
+   `app.add_middleware`, inside the stack) up to Starlette's
+   `ServerErrorMiddleware` (outside it, added automatically), which returns
+   a bare 500 with no CORS headers. The browser's CORS check then fails on
+   the response itself, so `fetch()` never even resolves with the real
+   status — it throws a generic network error instead. This would mask
+   *any* future error on this route the same way, not just a missing key.
+
+**Fix:**
+1. `railway variables --service wgs-backend --set "OPENAI_API_KEY_POC=..."`
+   — set directly against production. Confirmed present by name (not by
+   printing the value) before considering it done. Triggered an automatic
+   Railway redeploy, polled to `SUCCESS`.
+2. `routes/poc.py`: wrapped the `run_poc_writer(...)` call in `try/except
+   Exception`, converting any failure into a proper `HTTPException(502,
+   ...)`. FastAPI's normal exception handling for `HTTPException` runs
+   inside the middleware stack (unlike a truly unhandled exception), so the
+   response correctly carries CORS headers regardless of what actually
+   failed underneath.
+
+**Verified, in this order:**
+- Mocked failure through the full middleware stack (`TestClient`, an
+  `Origin` header matching the real `FRONTEND_ORIGIN`) — confirmed the fixed
+  route now returns `502` with `access-control-allow-origin` correctly
+  present, versus the bare unheaded `500` from before the fix.
+- Full backend suite: **127/127 passing**, unaffected.
+- **Real, live, unmocked `POST` to production** using the exact frontend
+  request shape (`{"topic_id": "mindset-self-doubt"}`, no `provider` field)
+  — `200 OK` in 27.8s, real `gpt-5.5` content returned, correct
+  `access-control-allow-origin: https://wgs-studio.vercel.app` on the
+  response.
+
+**Not a `docs/logbook.md` entry** — same reasoning as every other entry in
+this file: scoped to the isolated POC, not the shipped pipeline. The
+underlying *pattern* (env var never pushed to Railway; unhandled exceptions
+losing CORS headers) mirrors two separate real incidents already documented
+there (#6, #11/#12) — worth knowing if either resurfaces in the main
+pipeline, but this specific incident is POC-only.
