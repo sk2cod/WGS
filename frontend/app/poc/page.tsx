@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getTopics } from "@/lib/api";
 import type { Topic } from "@/lib/api-types";
 import { resolveTokens } from "@/lib/brand-tokens";
 import { WGS_BRAND_KIT } from "@/lib/wgs-brand-kit";
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from "@/lib/canvas";
 import { generatePoc, PocApiError } from "@/lib/poc-api";
 import type { PocGenerateResponse } from "@/lib/poc-types";
 import PocParagraphSlide from "@/components/slides/PocParagraphSlide";
-import ScaledSlide from "@/components/ui/ScaledSlide";
 import {
   cardStyle,
   inputStyle,
@@ -23,7 +23,11 @@ import {
 // renders everywhere else in the app.
 const POC_MASTHEAD = { masthead_short: WGS_BRAND_KIT.masthead_short, category: "", number: "" };
 const POC_TOKENS = resolveTokens(WGS_BRAND_KIT, "wisdom");
-const SCALE = 0.32;
+// Same one-slide-at-a-time scroll-snap carousel pattern as app/editor/page.tsx
+// (PREVIEW_SCALE there) — a plain overflow-x flex row with no scroll-snap, which
+// is what this page originally had, shows every slide side-by-side at once
+// instead of one full slide with swipe/dot navigation.
+const PREVIEW_SCALE = 0.32;
 
 export default function PocPage() {
   const [topics, setTopics] = useState<Topic[] | null>(null);
@@ -31,6 +35,23 @@ export default function PocPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PocGenerateResponse | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const slideWidth = CANVAS_WIDTH * PREVIEW_SCALE;
+
+  function goToSlide(index: number) {
+    setActiveIndex(index);
+    scrollRef.current?.scrollTo({ left: index * (slideWidth + 12), behavior: "smooth" });
+  }
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || !result) return;
+    const index = Math.round(el.scrollLeft / (slideWidth + 12));
+    if (index !== activeIndex && index >= 0 && index < result.slides.length) {
+      setActiveIndex(index);
+    }
+  }
 
   useEffect(() => {
     getTopics()
@@ -46,6 +67,7 @@ export default function PocPage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setActiveIndex(0);
     try {
       setResult(await generatePoc(selectedTopicId));
     } catch (err) {
@@ -101,20 +123,61 @@ export default function PocPage() {
 
       {result && (
         <>
-          <section
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
             style={{
               display: "flex",
-              gap: 16,
+              gap: 12,
               overflowX: "auto",
+              scrollSnapType: "x mandatory",
               paddingBottom: 8,
             }}
           >
             {result.slides.map((text, i) => (
-              <ScaledSlide key={i} scale={SCALE}>
-                <PocParagraphSlide text={text} masthead={POC_MASTHEAD} tokens={POC_TOKENS} />
-              </ScaledSlide>
+              <div
+                key={i}
+                style={{
+                  flex: "0 0 auto",
+                  scrollSnapAlign: "center",
+                  width: slideWidth,
+                  height: CANVAS_HEIGHT * PREVIEW_SCALE,
+                  overflow: "hidden",
+                  borderRadius: 12,
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
+                }}
+              >
+                <div
+                  style={{
+                    width: CANVAS_WIDTH,
+                    height: CANVAS_HEIGHT,
+                    transform: `scale(${PREVIEW_SCALE})`,
+                    transformOrigin: "top left",
+                  }}
+                >
+                  <PocParagraphSlide text={text} masthead={POC_MASTHEAD} tokens={POC_TOKENS} />
+                </div>
+              </div>
             ))}
-          </section>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            {result.slides.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goToSlide(i)}
+                aria-label={`Slide ${i + 1}`}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  border: "none",
+                  padding: 0,
+                  background: i === activeIndex ? POC_TOKENS.accent : "#ddd",
+                }}
+              />
+            ))}
+          </div>
 
           <section style={cardStyle}>
             <div style={labelStyle}>Conversation question</div>
