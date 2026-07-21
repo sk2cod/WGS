@@ -44,13 +44,15 @@ Reference voice — match this register, don't copy it:
 thing. Withhold the meaning of the detail for a beat. Never open with a
 definition. (Naming the anchor immediately, in the first sentence, is also
 valid when the anchor is striking enough on its own — see examples below.)
-By slide 2 at the latest, include at least one clause, phrase, or beat that
-gestures toward the reader's own life — a single wondering, comparison, or
-echo is enough; you do not need to explain the connection yet, only signal
-that one is coming. Before finalizing, check: does slide 1 or 2 contain that
-signal? If the piece stays entirely inside the anchor's own history,
-mechanics, or terminology through slide 3 with no such signal anywhere yet,
-add one now rather than waiting for a later slide.
+By the caption's second beat at the latest, include at least one clause,
+phrase, or beat that gestures toward the reader's own life — a single
+wondering, comparison, or echo is enough; you do not need to explain the
+connection yet, only signal that one is coming. Before finalizing, check:
+does the caption's first or second beat contain that signal? If the caption
+stays entirely inside the anchor's own history, mechanics, or terminology
+through its third beat with no such signal anywhere yet, add one now rather
+than waiting for later. Whichever beat carries this signal will end up as
+slide 1 or 2 once the caption is split — that's what makes it count.
 
 2. Before settling on your anchor, think of 3 real candidates — genuine
 historical practices, words, traditions, or scientific observations you are
@@ -92,18 +94,21 @@ detail — quietly returned to, not a new thought introduced.
 8. Never give an instruction or command to the reader. The reader arrives at
 the meaning themselves.
 
-9. The piece needs to actually travel: 4 to 7 real distinct beats. Every beat
-must do a genuinely different job than the one before it (for example:
-curiosity, then the anchor revealed, then why it mattered, then a turn toward
-the reader, then the emotional truth, then an echo of the opening — not every
-piece needs all of these, and not in this exact order, but each slide must
-move the piece somewhere new). Never split one reflective point across two
-adjacent slides just to add length — if slide N is making substantially the
-same point as slide N-1 in different words, cut one of them. Do not pad to
-fill more slides than the content genuinely earns. Before finalizing, check
-each adjacent pair of slides: does the second one state a claim, or restate
-the previous slide's claim using different words? If it's a restatement, cut
-it or replace it with something that adds new ground.
+9. The piece needs to actually travel: 4 to 7 real distinct beats, built into
+the caption itself. Every beat must do a genuinely different job than the one
+before it (for example: curiosity, then the anchor revealed, then why it
+mattered, then a turn toward the reader, then the emotional truth, then an
+echo of the opening — not every piece needs all of these, and not in this
+exact order, but each beat must move the piece somewhere new). Never spend
+two consecutive beats making substantially the same point in different words
+— if that happens in the caption, cut one before you ever get to splitting it
+into slides. Do not pad the caption with more beats than the content
+genuinely earns. Before finalizing, check each adjacent pair of beats in the
+caption: does the second one state a claim, or restate the one before it
+using different words? If it's a restatement, cut it or replace it with
+something that adds new ground. Get this right in the caption and the slide
+split inherits it for free — there is no separate distinctness check to do
+once you reach the slides.
 
 10. Any biographical or factual detail you can't be fully certain of gets a
 soft hedge ("said to," "known as," "believed to") rather than stated as flat
@@ -199,17 +204,29 @@ become someone it hadn't met yet.
 The anchor field must contain only your final chosen anchor, a few words, no
 reasoning or alternatives — do your comparison silently, output only the result.
 
+Write the caption before the slides. The caption is the real piece — write it
+exactly as you would if slides didn't exist, one continuous flowing telling,
+start to finish, with the beat structure rule 9 describes built into its own
+sentences. Only once that full caption exists do you make the slides, and
+making them is a split, not a second draft: group the caption's own
+sentences into 4 to 7 slide-sized pieces, breaking at the caption's own
+natural pauses — the moments where one beat ends and the next begins. Use
+the caption's exact wording. Do not reword, rewrite, summarize, or add new
+lines. You may trim a leading connective word or phrase that only made sense
+immediately after the sentence before it (an opening "That," "So," or "But"
+depending on what came right before), but otherwise the slides are the
+caption, split.
+
 Output as JSON:
 {
   "anchor": "<the specific real thing this piece is built around, in a few words>",
-  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total, however many
-  beats this specific story genuinely needs — do not pad to fill, do not
-  compress two beats into one slide to stay short],
+  "caption": "<the full piece, written first, start to finish, in flowing
+  prose — the real first draft, not a summary of anything that comes later>",
+  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total — the caption
+  above split at its own natural pauses, using its exact wording, not
+  reworded or rewritten],
   "conversation_question": "<one genuine, open question tied directly to this
-  story, for the reader to sit with>",
-  "caption": "<a full second telling of the same story in flowing prose,
-  elaborating rather than summarizing the same arc, may add one new
-  authentic personal-feeling detail the slides didn't have room for>"
+  story, for the reader to sit with>"
 }
 
 Topic: {topic}"""

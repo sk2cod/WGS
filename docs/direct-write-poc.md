@@ -228,7 +228,7 @@ This is `backend/app/poc/prompt.py`'s `POC_SYSTEM_PROMPT_TEMPLATE`, the
 (`--variant current`, the default). It already includes the rule-2
 multi-candidate anchor-verification rewrite and the rule-9 duplicate-beat
 diagnostic — both landed after real testing found the earlier versions
-insufficient (Section 7 and Section 10 below).
+insufficient (Section 7 and Section 12 below).
 
 ```
 You are the writer for Women's Growth Society (WGS) — for women in their 20s-40s
@@ -266,6 +266,15 @@ Reference voice — match this register, don't copy it:
 thing. Withhold the meaning of the detail for a beat. Never open with a
 definition. (Naming the anchor immediately, in the first sentence, is also
 valid when the anchor is striking enough on its own — see examples below.)
+By the caption's second beat at the latest, include at least one clause,
+phrase, or beat that gestures toward the reader's own life — a single
+wondering, comparison, or echo is enough; you do not need to explain the
+connection yet, only signal that one is coming. Before finalizing, check:
+does the caption's first or second beat contain that signal? If the caption
+stays entirely inside the anchor's own history, mechanics, or terminology
+through its third beat with no such signal anywhere yet, add one now rather
+than waiting for later. Whichever beat carries this signal will end up as
+slide 1 or 2 once the caption is split — that's what makes it count.
 
 2. Before settling on your anchor, think of 3 real candidates — genuine
 historical practices, words, traditions, or scientific observations you are
@@ -284,7 +293,11 @@ unrelated anchor partway through — deepen the one you opened with instead.
 
 4. If you cite a real person, study, or source, delay and soften the
 attribution — let the idea land first, then introduce who found it, never
-lead with a title.
+lead with a title. Prefer a role only ("a psychiatrist," "a marine
+biologist," "a historian") over a real name. A named, real researcher turns
+the moment into a citation rather than a discovery, even when delayed. Only
+name someone when their specific identity is itself part of why the anchor
+matters.
 
 5. Tentative language — "perhaps," "I wonder," "maybe," "somewhere along the
 way," "as though" — belongs at genuine reflective turns, the moments the
@@ -303,22 +316,36 @@ detail — quietly returned to, not a new thought introduced.
 8. Never give an instruction or command to the reader. The reader arrives at
 the meaning themselves.
 
-9. The piece needs to actually travel: 4 to 7 real distinct beats. Every beat
-must do a genuinely different job than the one before it (for example:
-curiosity, then the anchor revealed, then why it mattered, then a turn toward
-the reader, then the emotional truth, then an echo of the opening — not every
-piece needs all of these, and not in this exact order, but each slide must
-move the piece somewhere new). Never split one reflective point across two
-adjacent slides just to add length — if slide N is making substantially the
-same point as slide N-1 in different words, cut one of them. Do not pad to
-fill more slides than the content genuinely earns. Before finalizing, check
-each adjacent pair of slides: does the second one state a claim, or restate
-the previous slide's claim using different words? If it's a restatement, cut
-it or replace it with something that adds new ground.
+9. The piece needs to actually travel: 4 to 7 real distinct beats, built into
+the caption itself. Every beat must do a genuinely different job than the one
+before it (for example: curiosity, then the anchor revealed, then why it
+mattered, then a turn toward the reader, then the emotional truth, then an
+echo of the opening — not every piece needs all of these, and not in this
+exact order, but each beat must move the piece somewhere new). Never spend
+two consecutive beats making substantially the same point in different words
+— if that happens in the caption, cut one before you ever get to splitting it
+into slides. Do not pad the caption with more beats than the content
+genuinely earns. Before finalizing, check each adjacent pair of beats in the
+caption: does the second one state a claim, or restate the one before it
+using different words? If it's a restatement, cut it or replace it with
+something that adds new ground. Get this right in the caption and the slide
+split inherits it for free — there is no separate distinctness check to do
+once you reach the slides.
 
 10. Any biographical or factual detail you can't be fully certain of gets a
 soft hedge ("said to," "known as," "believed to") rather than stated as flat
 fact.
+
+11. Write like a storyteller pulling the reader into one real scene, never
+like an essay addressing an audience. Stay inside one specific person's
+experience or one confident, unaddressed observation — never generalize the
+reflective turn to a demographic or group ("I wonder how many women feel
+this," "so many of us," "many people know this"). The universal feeling
+should arrive because the specific detail was true, not because you named
+who else might relate to it. Avoid hedged, invitational phrasing that
+gestures at an undefined reader ("if you looked closely, you might
+notice...," "you may have noticed...") — state what's true directly and
+trust the detail to carry its own weight.
 
 Four examples of the finished style — study the underlying principles, not
 which specific opening move or how many turns each one uses; both an
@@ -331,20 +358,20 @@ shimenawa. It doesn't stop anyone from entering. It simply whispers: this
 place is different.
 No gate. No guard. No lock. Just a rope... and a quiet understanding that not
 every space should be entered in the same way. Sometimes meaning is stronger
-than force.
-I wonder if boundaries were always meant to feel more like this. Not walls
-built in fear. Not battles waiting to happen. Just a gentle way of saying,
-"This part of me deserves care."
-Somewhere along the way, many of us learned that protecting our peace
-required an explanation. That "no" should sound kinder. That "not now" should
-come wrapped in guilt. As though our boundaries needed permission before they
+than force. I wonder if this is closer to what a boundary is supposed to feel
+like.
+Not walls built in fear. Not battles waiting to happen. Just a gentle way of
+saying, "This part of me deserves care."
+Somewhere along the way, I learned that protecting my peace required an
+explanation. That "no" should sound kinder. That "not now" should
+come wrapped in guilt. As though my boundaries needed permission before they
 could exist.
 But the rope never explains itself. It doesn't convince. It doesn't
 apologise. It simply knows what it is protecting. Perhaps that's why it is
 respected.
 Maybe that's the invitation. To stop building walls so high that no one can
-reach us... and begin placing ropes clear enough that people know how to meet
-us. The strongest boundaries don't always push people away. Sometimes they
+reach me... and begin placing ropes clear enough that people know how to meet
+me. The strongest boundaries don't always push people away. Sometimes they
 simply show people how to come closer — with care.
 
 Example B (names the anchor after one beat of scene-setting):
@@ -353,13 +380,14 @@ after it was exhausted. Simply because rest was considered part of living
 well. Thousands of years ago, it was.
 In an ancient Hebrew tradition, every seventh year the land was left
 untouched. No planting. No harvesting. No asking it for one more season. This
-practice was called Shmita.
+practice was called Shmita. A permission the earth received without
+asking — the kind I still find hard to give myself.
 The land wasn't resting because it had stopped being useful. It rested
 because usefulness was never meant to come without renewal. Even the richest
 soil was trusted to become still.
-I wonder when we stopped extending ourselves the same kindness. Somewhere
-along the way, rest became something we earned. Something reserved for
-burnout. As though exhaustion were proof that we'd worked hard enough. The
+I wonder when I stopped extending myself the same kindness. Somewhere
+along the way, rest became something I had to earn. Something reserved for
+burnout. As though exhaustion were proof that I'd worked hard enough. The
 earth was never asked to wait that long.
 Maybe we've misunderstood what rest is. Not a reward. Not an interruption.
 Not time lost. Perhaps it has always been part of the work itself. Just as
@@ -398,21 +426,45 @@ become someone it hadn't met yet.
 The anchor field must contain only your final chosen anchor, a few words, no
 reasoning or alternatives — do your comparison silently, output only the result.
 
+Write the caption before the slides. The caption is the real piece — write it
+exactly as you would if slides didn't exist, one continuous flowing telling,
+start to finish, with the beat structure rule 9 describes built into its own
+sentences. Only once that full caption exists do you make the slides, and
+making them is a split, not a second draft: group the caption's own
+sentences into 4 to 7 slide-sized pieces, breaking at the caption's own
+natural pauses — the moments where one beat ends and the next begins. Use
+the caption's exact wording. Do not reword, rewrite, summarize, or add new
+lines. You may trim a leading connective word or phrase that only made sense
+immediately after the sentence before it (an opening "That," "So," or "But"
+depending on what came right before), but otherwise the slides are the
+caption, split.
+
 Output as JSON:
 {
   "anchor": "<the specific real thing this piece is built around, in a few words>",
-  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total, however many
-  beats this specific story genuinely needs — do not pad to fill, do not
-  compress two beats into one slide to stay short],
+  "caption": "<the full piece, written first, start to finish, in flowing
+  prose — the real first draft, not a summary of anything that comes later>",
+  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total — the caption
+  above split at its own natural pauses, using its exact wording, not
+  reworded or rewritten],
   "conversation_question": "<one genuine, open question tied directly to this
-  story, for the reader to sit with>",
-  "caption": "<a full second telling of the same story in flowing prose,
-  elaborating rather than summarizing the same arc, may add one new
-  authentic personal-feeling detail the slides didn't have room for>"
+  story, for the reader to sit with>"
 }
 
 Topic: {topic}
 ```
+
+**A technical note on how `caption`-before-`slides` is actually enforced, not
+just suggested:** `POST /poc/generate`'s default provider (`gpt-5.5`, Section
+9) uses OpenAI's structured/JSON-schema output mode, and that mode generates
+fields in the order they're declared in the schema's `properties` object —
+so the field order above isn't just prose the model is free to ignore, it's
+mechanically enforced by `backend/app/poc/openai_provider.py`'s
+`POC_RESPONSE_JSON_SCHEMA`, whose `properties` dict is kept in sync with this
+template (`anchor`, `caption`, `slides`, `conversation_question`, in that
+order). The Anthropic path has no equivalent enforcement — there, the field
+order above is only ever a strong suggestion via the example template, not a
+hard guarantee. Section 11 covers why this ordering exists and what it fixed.
 
 ---
 
@@ -600,7 +652,7 @@ credit issue that blocked the GPT-architecture-variant testing in Section 8:
 - **It avoided two unhedged/questionable-anchor failures Claude produced on
   identical topics.** On Pay-scale, Claude's anchor — "medieval guild
   journeyman wage ladders" — was a specific, unhedged institutional claim in
-  the same shape as the Damascus-apprentice-ladder failure (Section 10).
+  the same shape as the Damascus-apprentice-ladder failure (Section 12).
   gpt-5.5's anchor for the same topic — the actual U.S. federal **General
   Schedule pay table** — is not even a historical claim; it's a live,
   checkable, contemporary system. On Perfectionism, Claude's anchor — "Persian
@@ -610,7 +662,7 @@ credit issue that blocked the GPT-architecture-variant testing in Section 8:
   uncontroversial, well-documented printing history.
 - **It showed tighter beat-count discipline.** 6 slides in 3 of 5 trials,
   versus Claude's near-uniform landing at 7 across roughly 20 of 22 trials
-  logged in this document (Section 10). The prompt's own rule 9 says "however
+  logged in this document (Section 12). The prompt's own rule 9 says "however
   many beats this specific story genuinely needs... do not pad" — gpt-5.5's
   willingness to stop at 6 tracks that instruction more literally than
   Claude's consistent maxing-out at 7.
@@ -643,7 +695,7 @@ section (and the rejected GPT-architecture variant in Section 8) may continue.
    wasn't a same-session repeat for either model individually — it's two
    independent models, on two different occasions, converging on the same
    well-known historical fact. This suggests the anchor-repetition problem
-   (Section 11, `FINDINGS.md` #1) may not be purely a per-model quirk to
+   (Section 13, `FINDINGS.md` #1) may not be purely a per-model quirk to
    route around by switching providers — there may be a small pool of
    maximally "famous," high-scoring anchors (kintsugi for Claude, first/second
    sleep for both) that any sufficiently capable model gravitates toward
@@ -652,7 +704,179 @@ section (and the rejected GPT-architecture variant in Section 8) may continue.
 
 ---
 
-## 10. Testing results summary across all POC rounds
+## 10. The storyteller-voice tightening — rules 1, 4, 11, and the Shimenawa/Shmita edits
+
+Real-output review (not inference — actual generated pieces read line by
+line) surfaced a failure mode distinct from anchor fabrication or duplicate
+beats: pieces that were factually sound and structurally correct but still
+read like an explainer addressing an audience instead of a story pulling a
+reader in. Three concrete examples, from real generations, drove this:
+
+- **A dolphin-themed piece's second sentence:** *"If you looked closely, you
+  might notice one eye still open."* A cold reader has no context yet for who
+  "you" is — the line reads as documentary-voiceover invitation ("notice
+  this"), not observed scene, and the double hedge ("if... might") undercuts
+  what should be the sentence's sharpest detail rather than letting it land
+  as fact.
+- **An attachment-theory piece naming a real researcher directly:**
+  *"Mary Ainsworth and her colleagues used it to observe..."* — turning a
+  discovery into a citation, unlike every locked reference example, which
+  either omits the person entirely or describes them by role only ("a
+  psychiatrist," in amae).
+- **The same piece generalizing its reflective turn to a demographic:**
+  *"Somewhere along the way, many of us kept that room inside us."* This
+  exact pattern — "I wonder how many women," "many of us," "so many people"
+  — turned up independently in a second, unrelated piece too (a dolphin/rest
+  piece: *"I wonder how many women know this posture"*), confirming it was a
+  real recurring pattern, not a one-off.
+
+**Three prompt changes, in order of how directly they trace to the evidence
+above:**
+
+- **Rule 4 tightened** to prefer a role only ("a psychiatrist," "a marine
+  biologist," "a historian") over naming a real researcher, unless the
+  person's specific identity is itself part of why the anchor matters.
+- **New rule 11** added, banning both patterns at once: demographic
+  generalization of the reflective turn, and hedged/invitational phrasing
+  addressed to an undefined reader.
+- **Rule 1 extended**, twice. First pass: a soft note that the reader should
+  "sense within the first slide or two" that the piece connects to their
+  life. Testing found this didn't move anything — real trials on Attachment
+  Styles, Hormonal Cycle, and Boundaries all still delayed their actual
+  reader-bridge to slide 4–5 of 6–7, identical to before the soft version was
+  added. Second pass: a hard slide-2 ceiling with an explicit self-check
+  (mirroring rule 9's already-proven duplicate-beat diagnostic pattern) —
+  *"By slide 2 at the latest, include at least one clause, phrase, or beat
+  that gestures toward the reader's own life... Before finalizing, check:
+  does slide 1 or 2 contain that signal?"*
+
+**Testing, in rounds, reported plainly rather than rounded up:**
+
+1. **Rules 4 and 11 held cleanly from the first trial on** — zero violations
+   across every round of testing this section covers (12 of 12 trials total,
+   spanning three separate testing rounds and six different topics).
+2. **Rule 1's hard version still didn't move the needle on its own.** Same
+   three topics, re-tested: the explicit reader-bridge landed at the
+   identical slide number as before the tightening, every single time
+   (Attachment Styles: slide 5 of 7 both times; Hormonal Cycle: slide 4 of 6
+   both times; Boundaries: slide 4 of 7 both times). Wording alone wasn't the
+   lever.
+3. **The real lever turned out to be the locked reference examples
+   themselves.** Two of the four — Shimenawa and Shmita, both carried
+   forward from v1 — still contained the exact patterns rule 11 now forbids
+   (*"many of us learned..."*, *"we stopped extending ourselves..."*) and
+   neither demonstrated an early reader-signal for rule 1. mad money and
+   amae were already fully compliant with both and needed no changes.
+   Shimenawa and Shmita were edited: their collective "many of us"/"we"
+   language was converted to first-person "I," and each gained one added
+   clause at its own natural slide-2 point (Shimenawa: *"Sometimes meaning is
+   stronger than force. I wonder if this is closer to what a boundary is
+   supposed to feel like."*; Shmita: *"This practice was called Shmita. A
+   permission the earth received without asking — the kind I still find hard
+   to give myself."*). mad money and amae were left untouched.
+4. **Re-tested after the example edits: real, direct improvement, not
+   universal.** Attachment Styles immediately picked up the technique —
+   *"There are grown-up versions of this moment: the unanswered text, the
+   closed office door, the shift in someone's voice"* — landing exactly at
+   slide 2, a direct echo of the edited Shimenawa example's shape. Boundaries
+   and Hormonal Cycle didn't move on the same round (still stuck at slide 4),
+   because only one example (Shimenawa) demonstrated the technique and its
+   shape happened to match Attachment Styles' structure specifically. Editing
+   *Shmita* too — a structurally different anchor (a practice/tradition, not
+   an interrupted-scene shape) — generalized the fix: on the next round,
+   Boundaries produced a clean slide-2 hit (*"I think of it when I have
+   mistaken being clear for becoming hard"*) and Hormonal Cycle improved from
+   a faint implicit hint to a real, if still-not-fully-explicit, early
+   gesture. Net result across every round: rule 1 went from 0-of-3 topics
+   showing an early signal, to 2-of-3 clean plus 1 partial after both example
+   edits. Real, demonstrated, not guaranteed — the same reliability profile
+   every other rule in this prompt has shown under testing, not a special
+   exception.
+
+**Shipped** as commit `a542c18` ("Tighten POC prompt: storyteller voice,
+earlier reader signal, no named citations"). Full backend suite (127/127)
+unaffected throughout — this is prompt-text-only work; no route, script, or
+provider code changed.
+
+---
+
+## 11. The caption-first restructuring — slides as a mechanical split of the caption, not a second draft
+
+**The question that started this:** across nearly every round of testing
+logged in this document, captions consistently read better than slides —
+richer imagery, more varied sentence rhythm, cleaner transitions. Direct
+comparison made the reason legible: the original schema asked for `slides`
+before `caption`, and the caption's own instruction was *"a full second
+telling... elaborating."* Since JSON fields generate in order, the model was
+always writing the caption second, with the entire arc already decided —
+functionally a revision, written with hindsight the slides never got. Slides
+also carried more simultaneous constraints than the caption ever did (rule
+9's beat-distinctness check, rule 1's slide-2 signal placement, each slide
+needing to stand alone as a swipeable unit), which left less room for the
+caption's fluid, cumulative sentence rhythm.
+
+**First attempt: reorder the schema, ask slides to "reshape" the caption.**
+`caption` moved before `slides` in both `backend/app/poc/prompt.py`'s prose
+template *and* `backend/app/poc/openai_provider.py`'s
+`POC_RESPONSE_JSON_SCHEMA` — the schema reorder isn't cosmetic on the
+`gpt-5.5` path specifically, since OpenAI's structured-output mode enforces
+generation order from the schema's own `properties` order, unlike the
+Anthropic path, which only ever follows the prose template as a strong
+suggestion (see the technical note at the end of Section 6). Verified the
+order flip actually happened by checking literal byte position of `"anchor"`
+< `"caption"` < `"slides"` in the raw response text, not just the parsed
+JSON — confirmed 3 of 3 real trials.
+
+Slide quality genuinely improved. But real-output review surfaced two
+side effects:
+
+1. **Inconsistent reshaping.** 1 of 3 trials copied the caption verbatim
+   into slide-sized chunks; the other 2 reworded or added material while
+   "reshaping" as instructed — an unpredictable mix, same reliability
+   pattern as everything else in this prompt, but specifically undesirable
+   here since the goal was consistency.
+2. **One trial used embedded double-line-breaks inside a single slide** for
+   rhythmic effect (three short beats separated by blank lines within one
+   JSON string). `frontend/components/slides/PocParagraphSlide.tsx` doesn't
+   set `white-space: pre-line`, so this formatting choice would have
+   silently collapsed to plain spaces in the actual rendered app — a real,
+   if minor, mismatch between what the model produced and what the UI could
+   show. This concern became moot once the final fix below removed slides'
+   ability to invent their own internal structure at all.
+
+**The actual fix, prompted by direct pushback on the premise itself:**
+rather than accepting "reshape" as a second creative pass with its own
+judgment calls, the question was asked directly — why does a derived
+artifact need independent rules at all, if the source it's derived from is
+already good? The answer: it doesn't. `backend/app/poc/prompt.py` was
+rewritten so slides are explicitly **a mechanical split, not a rewrite**:
+*"Use the caption's exact wording. Do not reword, rewrite, summarize, or add
+new lines... otherwise the slides are the caption, split."* Rules 1 and 9
+were retargeted in the same pass to describe the **caption's** internal
+structure (its beats, its early signal) rather than the slides' — since
+slides no longer have independent structure to check, they inherit
+whatever the caption already has.
+
+**Verified, real trials, byte-for-byte:** re-ran three topics (Burnout,
+Attachment Styles, Motivational). Every single slide in every trial matched
+its corresponding caption paragraph **character for character** — no
+rewording, no additions, no exceptions. Both side effects from the first
+attempt resolved as a direct consequence: reshaping inconsistency is gone
+because there's nothing left to reshape, and the embedded-line-break
+formatting issue didn't recur because slides no longer invent structure the
+caption doesn't already have. Rules 4 and 11 held clean across all three
+(no named researcher, no demographic language). Rule 1's early-signal hit
+rate was unchanged from Section 10's finding (2 of 3 clean, matching the
+established reliability profile) — this restructuring targeted the
+caption/slide quality gap specifically, not rule 1's own reliability, and
+correctly didn't move that number either way.
+
+**Not yet shipped as of this writing** — tested and ready; see Section 13
+for exact current state.
+
+---
+
+## 12. Testing results summary across all POC rounds
 
 Combined across every round of testing the direct-write POC prompt has been
 through this session (not counting the GPT variant, covered separately
@@ -714,7 +938,7 @@ variant in any round to date.
 
 ---
 
-## 11. Current state, explicitly
+## 13. Current state, explicitly
 
 - The POC is committed and pushed, live at `/poc` on `wgs-studio.vercel.app`,
   backed by `POST /poc/generate` on the Railway backend.
@@ -735,7 +959,7 @@ variant in any round to date.
   only (`backend/app/poc/FINDINGS.md` #1) — not a resolution.
 - **A "hedge attributed reasons/motivations" refinement was offered and
   deferred**, in favor of testing the UI first — the refined diagnosis in
-  Section 10 (real anchors, unverified attached reasons) suggests rule 2 or
+  Section 12 (real anchors, unverified attached reasons) suggests rule 2 or
   rule 4 could be tightened further to specifically hedge the *reasoning*
   layered onto a real anchor, not just the anchor's existence. **Still
   open, not attempted.**
@@ -757,10 +981,26 @@ variant in any round to date.
   vs. an earlier Claude trial's "segmented sleep") suggests anchor
   repetition may need a fix that accounts for convergence across models, not
   just within one.
+- **The storyteller-voice tightening (rules 1, 4, 11, plus the
+  Shimenawa/Shmita example edits) is shipped** (Section 10), commit `a542c18`.
+  Rules 4 and 11 held with zero violations across every trial tested (12 of
+  12). Rule 1's early reader-signal is real but not universal — 2 of 3 fresh
+  topics clean, 1 partial, the same reliability profile every other rule in
+  this prompt has shown, not a special case.
+- **The caption-first restructuring is tested and ready, not yet shipped as
+  of this writing** (Section 11) — slides are now an explicit mechanical
+  split of the caption ("the slides are the caption, split"), not a second
+  creative pass. Verified byte-for-byte identical between caption paragraphs
+  and slides across three real trials. This closes the caption-vs-slide
+  quality gap that was visible throughout every earlier round in this
+  document. **Whoever picks this up next should confirm via `git log` and
+  `git status` whether it has since been committed and pushed** — this line
+  needs the same close-the-loop update the project's own logbook discipline
+  requires if it's stale by the time it's read.
 
 ---
 
-## 12. What a fresh chat should pick up next
+## 14. What a fresh chat should pick up next
 
 1. **Real UI testing of the POC**, now that the layout bug is fixed — this
    hasn't happened yet; every round of testing so far has gone through the
@@ -775,8 +1015,8 @@ variant in any round to date.
    coverage/non-repetition machinery, the six-template render contract) —
    those constraints haven't been re-evaluated against a direct-write
    approach at all yet.
-3. **The deferred "hedge attributed reasons" refinement** (Section 11) is
-   sitting there as a candidate next fix, informed by Section 10's refined
+3. **The deferred "hedge attributed reasons" refinement** (Section 13) is
+   sitting there as a candidate next fix, informed by Section 12's refined
    diagnosis, if POC testing continues before the integration decision.
 4. **Anchor repetition** still has no real fix, only the manual test-harness
    stopgap — worth real attention if the POC direction is chosen to continue

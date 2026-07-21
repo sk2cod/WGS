@@ -41,6 +41,13 @@ _USER_TURN = "Write the piece now. Output only the JSON object described above, 
 # Strict JSON Schema structured output — the same four fields the Anthropic path's
 # prompt already asks for in prose; this makes the shape a hard API guarantee
 # rather than something inferred from parsing a plain-text JSON response.
+#
+# Property order here is not cosmetic: OpenAI's structured-output mode generates
+# fields in the order they're declared in `properties`, so this is what actually
+# enforces "write caption before slides" on this path — the prose instruction in
+# prompt.py alone would only be a suggestion for a model that isn't schema-bound
+# the way gpt-5.5 is here. Keep this in sync with prompt.py's own field order if
+# either ever changes.
 POC_RESPONSE_JSON_SCHEMA = {
     "name": "poc_carousel_piece",
     "strict": True,
@@ -48,6 +55,7 @@ POC_RESPONSE_JSON_SCHEMA = {
         "type": "object",
         "properties": {
             "anchor": {"type": "string"},
+            "caption": {"type": "string"},
             "slides": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -55,9 +63,8 @@ POC_RESPONSE_JSON_SCHEMA = {
                 "maxItems": 7,
             },
             "conversation_question": {"type": "string"},
-            "caption": {"type": "string"},
         },
-        "required": ["anchor", "slides", "conversation_question", "caption"],
+        "required": ["anchor", "caption", "slides", "conversation_question"],
         "additionalProperties": False,
     },
 }
