@@ -871,6 +871,45 @@ established reliability profile) — this restructuring targeted the
 caption/slide quality gap specifically, not rule 1's own reliability, and
 correctly didn't move that number either way.
 
+**Shipped** as commit `81c632d` — verified live on Railway, byte-identical
+caption/slide output confirmed via a real production call.
+
+**Round 2, prompted by direct pushback on the shipped result itself:**
+immediately after confirming the byte-identical split live, the question was
+asked directly — *"why is caption and slide content exactly same? caption
+needs to be a different perspective right?"* This was a legitimate
+correction, not a restatement of the original complaint. On a real Instagram
+post, slides and caption are both visible in the same viewing session — a
+reader swipes the carousel, then reads the caption right below it. Making
+them byte-identical solved the quality gap by deleting the distinction
+between the two artifacts, not by making slides good as their own retelling;
+it also contradicted the caption's own original design intent (a "second
+telling," not a copy).
+
+**The fix:** kept caption-first (that part was correct — drafting the
+caption first, with full-arc hindsight, is what actually fixed quality,
+independent of the verbatim-copy question). Replaced the "use the caption's
+exact wording, do not reword" instruction with the opposite requirement:
+slides must retell the same beats, same anchor, same order the caption
+already established, but each one **rewritten fresh for its own screen** —
+explicitly flagged as wrong if a slide sentence matches the caption's wording
+closely. This is not simply reverting to the first attempt's "reshape, don't
+cut" instruction from earlier in this section — that version never
+explicitly forbade verbatim reuse, which is the most likely reason 1 of 3
+trials copied wholesale anyway; this version makes reuse an explicit,
+named failure mode to self-check against, the same pattern rule 1 and rule 9
+already use elsewhere in this prompt.
+
+**Verified, real trials:** re-ran three fresh topics (unsent letters,
+learning to say no, grief that shows up years later). All three produced
+slides that preserved the caption's beats, images, and order while using
+distinct sentence construction in every slide — no verbatim or
+near-verbatim sentence reuse in any trial. Rule 9's beat-distinctness
+check still holds under this change without modification: it operates on
+beat/idea distinctness, not literal wording, so rewording a beat for its
+own slide doesn't reintroduce a duplicate-beat problem as long as the same
+underlying beat structure is preserved.
+
 **Not yet shipped as of this writing** — tested and ready; see Section 13
 for exact current state.
 
@@ -987,20 +1026,87 @@ variant in any round to date.
   12). Rule 1's early reader-signal is real but not universal — 2 of 3 fresh
   topics clean, 1 partial, the same reliability profile every other rule in
   this prompt has shown, not a special case.
-- **The caption-first restructuring is tested and ready, not yet shipped as
-  of this writing** (Section 11) — slides are now an explicit mechanical
-  split of the caption ("the slides are the caption, split"), not a second
-  creative pass. Verified byte-for-byte identical between caption paragraphs
-  and slides across three real trials. This closes the caption-vs-slide
-  quality gap that was visible throughout every earlier round in this
-  document. **Whoever picks this up next should confirm via `git log` and
-  `git status` whether it has since been committed and pushed** — this line
+- **The caption-first restructuring shipped as commit `81c632d`** (Section
+  11), then was revised once more on real feedback the same session — the
+  first shipped version made slides byte-identical to the caption, which
+  closed the quality gap but deleted the caption's own reason to exist
+  (both are visible in the same Instagram viewing session; identical text
+  reads as redundant, and it contradicted the caption's original "second
+  telling" design intent). The revision keeps caption-first (proven to fix
+  quality) but requires slides to retell the caption's beats in fresh
+  wording rather than copy them. Verified across three real trials — same
+  beats/anchor/order as the caption, no verbatim or near-verbatim sentence
+  reuse in any trial. **Tested and ready, not yet shipped as of this
+  writing.** Whoever picks this up next should confirm via `git log` and
+  `git status` whether it has since been committed and pushed — this line
   needs the same close-the-loop update the project's own logbook discipline
   requires if it's stale by the time it's read.
+- **Punctuation/pacing and selective slide line breaks are tested and ready,
+  not yet shipped** (Section 14) — rules 12/13 added to `prompt.py`,
+  `PocParagraphSlide.tsx` updated to render line breaks. Same
+  not-yet-shipped status and close-the-loop caveat as the bullet above.
 
 ---
 
-## 14. What a fresh chat should pick up next
+## 14. Punctuation/pacing and selective slide line breaks
+
+**The ask:** direct feedback that slides needed grammatical/punctuation
+polish for reading rhythm (correct pauses, emphasis), plus the ability to
+use a line break inside a slide when one genuinely aids pacing.
+
+**Punctuation (rule 12):** a new rule instructing periods for real stops,
+commas only for a light breath within one continuous thought (never splicing
+two complete sentences), em dashes for a turn or reveal, and breaking a
+long multi-clause sentence into two rather than stacking commas. Framed as
+"read it back aloud" self-check, matching the pattern the rest of this
+prompt already uses for anything that needs to hold reliably.
+
+**Line breaks (rule 13) — needed one round of tightening.** The first
+version allowed a slide to use a line break "sparingly, at most once or
+twice across all the slides in a piece." Real trials showed this doesn't
+hold as a soft instruction: one topic ("setting boundaries with family")
+used line breaks in 3 of 5 slides, another ("imposter syndrome at work")
+used them in 5 of 6 — the model treated the option as a default stylistic
+device rather than a rare one, the same failure mode soft instructions have
+shown everywhere else in this prompt (rule 1 needed the same hardening in
+Section 10). Rewritten as a hard cap with an explicit count-and-check step:
+**at most one line break in the entire piece, across every slide combined**,
+only for a single-word or few-word phrase that has earned standing
+completely alone, with an instruction to count every line break before
+finalizing and cut down to the strongest one (or none). Re-ran both topics
+after the fix — zero line breaks in either, which is compliant (the rule
+allows zero-to-one, and "most pieces should use zero" is the explicit
+guidance) but means this round of testing didn't produce a positive example
+of the capability actually firing. Worth a specific eye on this the next
+time real trials run, to confirm it can still produce one when a phrase
+genuinely earns it, not just suppress it entirely.
+
+**Frontend fix, not just a prompt change.** `PocParagraphSlide.tsx` — the
+component the live `/poc` page uses to preview slides — did not set
+`white-space: pre-line`, so an embedded `\n` in slide text would have
+silently collapsed to a space rather than rendering as a break. Added
+`whiteSpace: "pre-line"` to the slide's text `<span>`. This component
+renders as a plain React/DOM element directly in the browser (confirmed by
+checking `frontend/app/poc/page.tsx` — no `/api/render` or Satori call
+anywhere in the POC's frontend path), unlike the production pipeline's slide
+templates, which render through Satori (`@vercel/og`) and have their own,
+separate set of CSS-subset constraints (see `CLAUDE.md`'s rendering note).
+Standard CSS `white-space` support applies cleanly here with no equivalent
+risk.
+
+**Verified, real trials:** four fresh topics run after both rule 12 and the
+tightened rule 13 (boundaries with family, imposter syndrome at work, plus
+the two from the line-break-tightening re-run). Punctuation read cleanly in
+every trial — no comma splices, no run-on sentences, appropriate em dash use
+for turns. No line breaks fired in any of the post-fix trials, consistent
+with the new hard cap.
+
+**Not yet shipped as of this writing** — tested and ready; see Section 13
+for current-state status.
+
+---
+
+## 15. What a fresh chat should pick up next
 
 1. **Real UI testing of the POC**, now that the layout bug is fixed — this
    hasn't happened yet; every round of testing so far has gone through the
@@ -1021,3 +1127,8 @@ variant in any round to date.
 4. **Anchor repetition** still has no real fix, only the manual test-harness
    stopgap — worth real attention if the POC direction is chosen to continue
    past evaluation.
+5. **Rule 13's line-break cap has only been verified at zero** (Section 14)
+   — every post-fix trial produced zero line breaks, which is compliant but
+   untested at the "exactly one, well-placed" end of what the rule allows.
+   Worth watching for a genuine positive example in a future round, not just
+   confirming it stays suppressed.

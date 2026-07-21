@@ -125,6 +125,25 @@ gestures at an undefined reader ("if you looked closely, you might
 notice...," "you may have noticed...") — state what's true directly and
 trust the detail to carry its own weight.
 
+12. Punctuation should shape how a reader hears the sentence, not just close
+it grammatically. Use a period where a thought genuinely stops. Use a comma
+only for a light breath inside one continuous thought, never to splice two
+complete sentences together. Use an em dash for a beat that turns,
+interrupts, or lands a reveal. Break a sentence into two rather than
+stacking three or more clauses behind commas. Read each sentence back as if
+speaking it aloud — if there's no punctuation where a real pause belongs,
+add one.
+
+13. A slide may use a line break (a literal newline inside its string) to
+let one short, weighty phrase land on its own — the kind of pause a reader
+takes without being told to. This is rare, not a default device: at most
+ONE line break in the entire piece, across every slide combined, and only
+if a single-word or few-word phrase has earned standing completely alone.
+Never use it to split an ordinary sentence in half. Before finalizing, count
+every line break across all slides — if the count is more than one, remove
+all but the single strongest instance, or none at all if nothing truly
+earns it. Most pieces should use zero.
+
 Four examples of the finished style — study the underlying principles, not
 which specific opening move or how many turns each one uses; both an
 immediate-naming opening and a withhold-and-reveal opening are valid:
@@ -207,24 +226,27 @@ reasoning or alternatives — do your comparison silently, output only the resul
 Write the caption before the slides. The caption is the real piece — write it
 exactly as you would if slides didn't exist, one continuous flowing telling,
 start to finish, with the beat structure rule 9 describes built into its own
-sentences. Only once that full caption exists do you make the slides, and
-making them is a split, not a second draft: group the caption's own
-sentences into 4 to 7 slide-sized pieces, breaking at the caption's own
-natural pauses — the moments where one beat ends and the next begins. Use
-the caption's exact wording. Do not reword, rewrite, summarize, or add new
-lines. You may trim a leading connective word or phrase that only made sense
-immediately after the sentence before it (an opening "That," "So," or "But"
-depending on what came right before), but otherwise the slides are the
-caption, split.
+sentences. Only once that full caption exists do you make the slides.
+
+The slides are a second telling of the same beats, in the same order, built
+from the same anchor and images the caption already established — not a
+copy of it. A reader may see both the slides and the caption on the same
+post, back to back, so a slide must never reuse the caption's sentence
+almost word for word. Take each beat the caption already worked out and
+write it fresh for its own screen: same moment, same image, same idea,
+different sentence. If you notice a slide sentence matching the caption's
+wording closely, rewrite it before moving on.
 
 Output as JSON:
 {
   "anchor": "<the specific real thing this piece is built around, in a few words>",
   "caption": "<the full piece, written first, start to finish, in flowing
   prose — the real first draft, not a summary of anything that comes later>",
-  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total — the caption
-  above split at its own natural pauses, using its exact wording, not
-  reworded or rewritten],
+  "slides": ["<paragraph 1>", "<paragraph 2>", ... 4 to 7 total — the same
+  beats as the caption above, in the same order, each one rewritten fresh
+  for its own screen rather than copied or lightly trimmed from the
+  caption's own sentences. A slide may contain one internal line break per
+  rule 13, sparingly],
   "conversation_question": "<one genuine, open question tied directly to this
   story, for the reader to sit with>"
 }

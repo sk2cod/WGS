@@ -49,6 +49,7 @@ export default function PocParagraphSlide({ text, masthead, tokens }: PocParagra
             fontSize: paragraphFontSize(text),
             lineHeight: 1.45,
             color: tokens.text_color,
+            whiteSpace: "pre-line",
           }}
         >
           {text}
