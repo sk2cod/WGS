@@ -222,6 +222,9 @@ export default function Home() {
       <Link href="/preview" style={{ ...labelStyle, textAlign: "center" }}>
         View template preview grid
       </Link>
+      <Link href="/poc" style={{ ...labelStyle, textAlign: "center" }}>
+        POC: micro-essay writer
+      </Link>
     </main>
   );
 }

@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.routes.export import router as export_router
 from app.routes.generate import router as generate_router
 from app.routes.picks import router as picks_router
+from app.routes.poc import router as poc_router
 from app.routes.sources import router as sources_router
 from app.routes.topics import router as topics_router
 
@@ -22,5 +23,6 @@ app.add_middleware(
 app.include_router(export_router)
 app.include_router(generate_router)
 app.include_router(picks_router)
+app.include_router(poc_router)
 app.include_router(sources_router)
 app.include_router(topics_router)
