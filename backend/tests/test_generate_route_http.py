@@ -26,11 +26,23 @@ _DRAFT_CAROUSEL_JSON = json.dumps(
     {
         "slides": [
             {"headline_word": "PAUSE", "script_word": "first.", "kicker": "short kicker"},
-            {"statement_pre": "short body", "statement_script": "one", "statement_post": ""},
-            {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
-            {"statement_pre": "short body", "statement_script": "three", "statement_post": ""},
-            {"takeaway": "short body three"},
-            {"question": "What would you tell a friend in your exact position?"},
+            {
+                "statement_pre": "This is a fuller short body",
+                "statement_script": "statement one",
+                "statement_post": "that fills the space",
+            },
+            {
+                "statement_pre": "This is a fuller short body",
+                "statement_script": "statement two",
+                "statement_post": "that fills the space",
+            },
+            {
+                "statement_pre": "This is a fuller short body",
+                "statement_script": "statement three",
+                "statement_post": "that fills the space",
+            },
+            {"takeaway": "Short body three words alone were never going to look complete"},
+            {"question": "What would you tell a friend who was standing exactly in your position right now?"},
         ],
         "caption": "a caption",
         "hashtags": ["#a", "#b"],

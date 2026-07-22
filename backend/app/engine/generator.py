@@ -71,6 +71,48 @@ _ROLE_FIELDS_EXAMPLE = {
     ),
 }
 
+# Per-template (min, max) word ranges, replacing the single flat
+# ContentBrief.max_words_per_slide=30 cap for the roles found to need one via
+# real Satori renders against real POC-length content (docs/logbook.md). Each
+# range is a floor as well as a ceiling now -- a slide that's too short for its
+# template looks as broken as one that's too long, confirmed by real render:
+# a 5-word carousel_body statement and a 26-word carousel_body_teaching slide
+# both left large, unintentional-looking empty space.
+#
+# carousel_cover is deliberately absent -- its hero image absorbs any headline
+# length, no problem was found, it keeps using brief.max_words_per_slide
+# unchanged. single_quote is also absent: its problem was never word count
+# (see SlideFrame/SingleQuote.tsx's vertical-centering fix), it also keeps the
+# unchanged flat cap. single_stat is handled separately below, field by field,
+# not as one combined range -- see _SINGLE_STAT_NUMBER_WORD_RANGE.
+_WORD_RANGE_FOR_ROLE: dict[str, tuple[int, int]] = {
+    "carousel_body": (10, 20),
+    "carousel_body_teaching": (35, 50),
+    "carousel_closing": (10, 20),
+    "carousel_conversation": (15, 25),
+}
+
+# single_stat's `number` field is meant to hold a short numeral/stat ("73%", "4
+# styles"), not a sentence -- it renders at 200px with no wrap guard. Previously
+# unbounded by anything: a real production refine step put an ungrounded
+# generalization ("Women face a tighter error margin", 5 words) in this field,
+# which rendered as 5 lines of 200px text filling the entire canvas (confirmed
+# live, docs/logbook.md). Checked as its own field, separate from
+# supporting_line, because a combined slide-level word count can't catch a
+# bloated `number` sitting next to a short `supporting_line` -- the two would
+# average out and look fine on paper while `number` alone overflows.
+_SINGLE_STAT_NUMBER_WORD_RANGE = (1, 3)
+_SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE = (15, 20)
+
+
+def _tolerant_word_range(min_words: int, max_words: int) -> tuple[int, int]:
+    """Same 10%-buffer philosophy as _tolerant_word_cap (logbook #39 round 8),
+    applied to both ends of a range -- a slide one or two words under a
+    template's floor isn't the same defect as one that's genuinely sparse,
+    same as a few words over the ceiling isn't the same defect as genuinely
+    bloated."""
+    return math.floor(min_words * 0.9), math.ceil(max_words * 1.1)
+
 # One-line structural definition per approach — without this, a post can be labeled
 # with an approach without its output actually delivering that approach's shape.
 _APPROACH_DEFINITIONS: dict[str, str] = {
@@ -344,8 +386,32 @@ def _tolerant_word_cap(cap: int) -> int:
     return math.ceil(cap * 1.1)
 
 
-def _slides_shape_description(roles: list[SlideRole]) -> str:
-    lines = [f"Slide {i} ({role}): {_ROLE_FIELDS_EXAMPLE[role]}" for i, role in enumerate(roles, start=1)]
+def _word_target_text_for_role(role: SlideRole, brief: ContentBrief) -> str:
+    """Per-slide word guidance shown inline next to that slide's shape, replacing
+    the old single blanket cap stated once for the whole post."""
+    carousel = brief.format == Format.CAROUSEL
+    role_range = _WORD_RANGE_FOR_ROLE.get(role)
+    if role_range is not None:
+        lo, hi = _tolerant_word_range(*role_range) if carousel else role_range
+        return f"{lo}-{hi} words total across this slide's fields"
+    if role == "single_stat":
+        num_lo, num_hi = _SINGLE_STAT_NUMBER_WORD_RANGE
+        sup_lo, sup_hi = _SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE
+        return (
+            f"number: {num_lo}-{num_hi} words, a short numeral/stat only, never a "
+            f"sentence (this field renders at 200px and overflows badly if long); "
+            f"supporting_line: {sup_lo}-{sup_hi} words"
+        )
+    cap = _tolerant_word_cap(brief.max_words_per_slide) if carousel else brief.max_words_per_slide
+    return f"up to {cap} words total across this slide's fields"
+
+
+def _slides_shape_description(brief: ContentBrief, roles: list[SlideRole]) -> str:
+    lines = [
+        f"Slide {i} ({role}): {_ROLE_FIELDS_EXAMPLE[role]} — target "
+        f"{_word_target_text_for_role(role, brief)}"
+        for i, role in enumerate(roles, start=1)
+    ]
     return "\n".join(lines)
 
 
@@ -445,23 +511,18 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
 
     kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
 
-    # Correction in logbook #39's round 8: the 10% word-budget tolerance was
-    # applied universally by mistake — pulled back to carousel-only here,
-    # matching every other v1 change. single_image reverts to the original
-    # hard cap, unchanged.
-    if brief.format == Format.CAROUSEL:
-        word_cap_line = (
-            f"Max words per slide (all text fields on that slide, combined): "
-            f"{brief.max_words_per_slide}, with up to 10% over "
-            f"({_tolerant_word_cap(brief.max_words_per_slide)}) as an acceptable buffer, "
-            "not a hard wall — stay near the target, but a few words over it alone is "
-            "not a defect.\n"
-        )
-    else:
-        word_cap_line = (
-            f"Max words per slide (all text fields on that slide, combined): "
-            f"{brief.max_words_per_slide}\n"
-        )
+    # Per-template word targets, not one flat number for the whole post (see
+    # _WORD_RANGE_FOR_ROLE / _word_target_text_for_role) — real Satori renders
+    # against real content found a single flat cap left some templates
+    # (carousel_body_teaching) looking sparse and others (carousel_body,
+    # carousel_closing) too thin at the low end, with no floor at all before
+    # this. Stated inline per slide in _slides_shape_description below, not
+    # here, since the right target genuinely differs by template.
+    word_cap_line = (
+        "Word targets are given per slide below, next to that slide's shape — "
+        "treat them as a comfortable range, not a hard wall; a few words over "
+        "or under a target alone is not a defect.\n"
+    )
 
     # Carousel-only "v1" content-voice experiment (logbook #39) — single_image takes
     # the else branch, completely unchanged from before this experiment existed.
@@ -499,7 +560,7 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
         f"{kicker_block}"
         "\nThis post has the following slides, each already assigned a fixed visual "
         "template — write ONLY the fields listed for its role, nothing else:\n"
-        f"{_slides_shape_description(roles)}\n"
+        f"{_slides_shape_description(brief, roles)}\n"
         "\nRespond with ONLY JSON, no markdown fence, in this exact shape: "
         '{"slides": [ <slide 1 fields>, <slide 2 fields>, ... ], "caption": "...", '
         '"hashtags": ["...", ...]}'
@@ -671,16 +732,17 @@ def critique_post(
         "not model-generated, and cannot be changed by refine. "
     )
     # Added in logbook #39's round 8, corrected to carousel-only in the same
-    # round after being applied universally by mistake — matches the system
-    # prompt's word_cap_line above and every other v1 change in scope.
-    # single_image reverts to no explicit tolerance statement here, same as
-    # before round 8 (the base "word limits" mention in the prompt below still
-    # applies, just without a stated buffer).
+    # round after being applied universally by mistake. Now per-template
+    # (not one flat number) since each slide's own target is already stated
+    # inline in the system prompt's shape description
+    # (_word_target_text_for_role) — critique is told to check against those,
+    # both a floor and a ceiling now, not just re-derive one shared cap here.
+    # single_image reverts to no explicit tolerance statement, same as before.
     word_tolerance_instruction = (
-        f"Only flag a slide's word count if it exceeds "
-        f"{_tolerant_word_cap(brief.max_words_per_slide)} words — the "
-        f"{brief.max_words_per_slide}-word target plus its 10% buffer. A few words "
-        "over the bare target alone is not a defect. "
+        "Only flag a slide's word count if it falls outside that slide's own "
+        "target range stated above for its template — both too far under and "
+        "too far over count, with the 10% buffer on each end already applied "
+        "there. A few words either side of a target alone is not a defect. "
         if brief.format == Format.CAROUSEL
         else ""
     )

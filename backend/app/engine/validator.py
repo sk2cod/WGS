@@ -8,12 +8,21 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.engine.generator import _citation_mode, _tolerant_word_cap, slide_text
+from app.engine.generator import (
+    _SINGLE_STAT_NUMBER_WORD_RANGE,
+    _SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE,
+    _WORD_RANGE_FOR_ROLE,
+    _citation_mode,
+    _tolerant_word_cap,
+    _tolerant_word_range,
+    slide_roles_for,
+    slide_text,
+)
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief
 from app.models.enums import Format
 from app.models.memory import MemoryRecord
-from app.models.post import GeneratedPost
+from app.models.post import GeneratedPost, StatSlide
 
 
 class ValidationResult(BaseModel):
@@ -33,28 +42,91 @@ def _check_forbidden(brand_kit: BrandKit, post: GeneratedPost) -> list[str]:
     return errors
 
 
-def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
-    """logbook #39, round 8 correction: carousel's word cap now allows the same
-    10% tolerance the model is actually told about (system prompt + critique,
-    generator.py::_tolerant_word_cap) -- without this, a slide the model
-    believed was compliant could still trip the app's "Needs a look" banner,
-    the visible warning and the model's real instruction disagreeing.
-    single_image keeps the original, untolerant cap unchanged."""
-    errors = []
-    if len(post.slides) != brief.slide_count:
-        errors.append(f"expected {brief.slide_count} slide(s), got {len(post.slides)}")
+def _check_slide_word_range(brief: ContentBrief, role: str, index: int, slide) -> list[str]:
+    """Per-template (min, max) ranges replacing the old flat max_words_per_slide
+    cap for the roles found to need one via real Satori renders (docs/logbook.md)
+    -- carousel_body, carousel_body_teaching, carousel_closing, and
+    carousel_conversation each get their own range, with the same 10% tolerance
+    (both ends) as _tolerant_word_cap already used carousel-only. Roles absent
+    from _WORD_RANGE_FOR_ROLE (carousel_cover, single_quote) keep the original
+    flat brief.max_words_per_slide cap, unchanged -- no problem was found for
+    either. single_stat is checked separately below, field by field, not folded
+    into this combined-text check."""
+    range_ = _WORD_RANGE_FOR_ROLE.get(role)
+    if range_ is not None:
+        min_words, max_words = _tolerant_word_range(*range_) if brief.format == Format.CAROUSEL else range_
+        word_count = len(slide_text(slide).split())
+        if word_count < min_words:
+            return [
+                f"slide {index} ({role}) has {word_count} words, below the "
+                f"{min_words}-word floor for this template"
+            ]
+        if word_count > max_words:
+            return [
+                f"slide {index} ({role}) has {word_count} words, exceeds the "
+                f"{max_words}-word ceiling for this template"
+            ]
+        return []
+
+    if isinstance(slide, StatSlide):
+        return _check_single_stat_fields(index, slide)
+
     effective_cap = (
         _tolerant_word_cap(brief.max_words_per_slide)
         if brief.format == Format.CAROUSEL
         else brief.max_words_per_slide
     )
-    for i, slide in enumerate(post.slides, start=1):
-        word_count = len(slide_text(slide).split())
-        if word_count > effective_cap:
-            errors.append(
-                f"slide {i} has {word_count} words, exceeds max_words_per_slide "
-                f"({effective_cap})"
-            )
+    word_count = len(slide_text(slide).split())
+    if word_count > effective_cap:
+        return [
+            f"slide {index} has {word_count} words, exceeds max_words_per_slide "
+            f"({effective_cap})"
+        ]
+    return []
+
+
+def _check_single_stat_fields(index: int, slide: StatSlide) -> list[str]:
+    """number and supporting_line get independent ranges, not one combined
+    slide-level word count -- a combined count can't catch a bloated `number`
+    sitting next to a short `supporting_line`, which is exactly the shape of
+    the real production bug this check exists for (docs/logbook.md): a 5-word
+    generalization in `number` rendered as 5 lines of 200px text filling the
+    whole canvas, while the slide's total word count looked unremarkable."""
+    errors = []
+    num_lo, num_hi = _SINGLE_STAT_NUMBER_WORD_RANGE
+    number_words = len(slide.number.split())
+    if not (num_lo <= number_words <= num_hi):
+        errors.append(
+            f"slide {index} (single_stat) number field has {number_words} word(s) "
+            f"({slide.number!r}), expected {num_lo}-{num_hi} -- this field renders "
+            "at 200px with no wrap guard and overflows badly outside a short "
+            "numeral/stat"
+        )
+    sup_lo, sup_hi = _SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE
+    sup_words = len(slide.supporting_line.split())
+    if not (sup_lo <= sup_words <= sup_hi):
+        errors.append(
+            f"slide {index} (single_stat) supporting_line has {sup_words} words, "
+            f"expected {sup_lo}-{sup_hi}"
+        )
+    return errors
+
+
+def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
+    """logbook #39, round 8: carousel's word cap allows the same 10% tolerance
+    the model is actually told about (system prompt + critique) -- without
+    this, a slide the model believed was compliant could still trip the app's
+    "Needs a look" banner, the visible warning and the model's real
+    instruction disagreeing. Per-template ranges (added on top of that same
+    tolerance philosophy) replace the single flat cap for the roles real
+    Satori renders found needed one -- see _check_slide_word_range."""
+    errors = []
+    if len(post.slides) != brief.slide_count:
+        errors.append(f"expected {brief.slide_count} slide(s), got {len(post.slides)}")
+
+    roles = slide_roles_for(brief)
+    for i, (role, slide) in enumerate(zip(roles, post.slides), start=1):
+        errors.extend(_check_slide_word_range(brief, role, i, slide))
     return errors
 
 

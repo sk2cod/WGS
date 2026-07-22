@@ -22,7 +22,14 @@ _DRAFT_SINGLE_QUOTE_JSON = json.dumps(
 )
 _DRAFT_SINGLE_STAT_JSON = json.dumps(
     {
-        "slides": [{"kicker": "Did you know", "number": "42%", "supporting_line": "one punchy line"}],
+        "slides": [{
+            "kicker": "Did you know",
+            "number": "42%",
+            "supporting_line": (
+                "One punchy line was never going to be enough content to fill "
+                "this slide comfortably on its own"
+            ),
+        }],
         "caption": "a caption",
         "hashtags": ["#a"],
     }
@@ -31,13 +38,30 @@ _DRAFT_SINGLE_STAT_JSON = json.dumps(
 # Placeholder content per possible carousel body-slot role — which role(s) actually
 # get requested depends on the (randomly sampled) approach, so carousel drafts are
 # generated adaptively (see _AdaptiveLLM) rather than as one fixed fragment/count.
+# Word counts here are deliberately inside each role's real per-template range
+# (generator.py::_WORD_RANGE_FOR_ROLE) — validate_post now enforces a floor as
+# well as a ceiling per template, not just one flat max.
 _SLIDE_CONTENT_BY_ROLE = {
     "carousel_cover": {"headline_word": "PAUSE", "script_word": "first.", "kicker": "short kicker"},
-    "carousel_body": {"statement_pre": "short body", "statement_script": "two", "statement_post": ""},
-    "carousel_body_teaching": {"heading": "A heading", "body": "A full sentence of teaching content here."},
-    "carousel_closing": {"takeaway": "short body three"},
+    "carousel_body": {
+        "statement_pre": "This is a fuller short body statement",
+        "statement_script": "that actually fills",
+        "statement_post": "the space properly now",
+    },
+    "carousel_body_teaching": {
+        "heading": "A heading",
+        "body": (
+            "A full sentence of teaching content that actually fills this slide "
+            "with enough real substance to look intentional rather than sparse "
+            "when it renders on the canvas, the way a real teaching slide is "
+            "supposed to look in production."
+        ),
+    },
+    "carousel_closing": {"takeaway": "Short body three words alone were never going to look complete"},
     # logbook #39 round 7 -- label/invite are fixed defaults, only question is asked
-    "carousel_conversation": {"question": "What would you tell a friend in your exact position?"},
+    "carousel_conversation": {
+        "question": "What would you tell a friend who was standing exactly in your position right now?"
+    },
 }
 
 

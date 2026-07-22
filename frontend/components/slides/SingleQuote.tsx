@@ -7,7 +7,17 @@ interface SingleQuoteProps extends SingleQuoteContent {
   tokens: ResolvedTokens;
 }
 
-/** No photo — an oversized translucent script quotation mark sits behind the quote text. */
+/**
+ * No photo — an oversized translucent script quotation mark sits behind the quote text.
+ *
+ * Fixed: this block used to be top-anchored (fixed marginTop, no vertical
+ * centering) with nothing below it to fill the rest of the canvas — unlike
+ * every other flex:1-centered template, a short quote left large, empty
+ * space in the bottom half of the slide on a real Satori render
+ * (docs/logbook.md). Now flex:1 + justifyContent:"center", matching the
+ * convention CarouselBody/CarouselBodyTeaching/CarouselClosing/
+ * ConversationSlide/SingleStat already use.
+ */
 export default function SingleQuote({ masthead, tokens, quote }: SingleQuoteProps) {
   return (
     <SlideFrame backgroundColor={tokens.background_color}>
@@ -16,9 +26,10 @@ export default function SingleQuote({ masthead, tokens, quote }: SingleQuoteProp
       <div
         style={{
           display: "flex",
+          flex: 1,
           flexDirection: "column",
+          justifyContent: "center",
           position: "relative",
-          marginTop: 56,
         }}
       >
         <span
@@ -42,7 +53,7 @@ export default function SingleQuote({ masthead, tokens, quote }: SingleQuoteProp
             fontSize: 52,
             lineHeight: 1.35,
             color: tokens.text_color,
-            marginTop: 240,
+            marginTop: 48,
           }}
         >
           {quote}

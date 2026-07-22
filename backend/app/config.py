@@ -11,8 +11,17 @@ class Settings(BaseSettings):
     # --- AI providers ---
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_model_cheap: str = "claude-haiku-4-5-20251001"
-    llm_model_strong: str = "claude-sonnet-5"
+    # Default provider for LLMProvider (app/providers/llm.py) -- "openai" as of the
+    # locked-decision reversal (docs/logbook.md). "anthropic" remains fully
+    # functional, selectable per-instance (LLMProvider(provider="anthropic")) or
+    # fleet-wide by setting this env var, no redeploy needed.
+    llm_provider: str = "openai"
+    llm_model_cheap: str = "gpt-5.6-luna"
+    llm_model_strong: str = "gpt-5.5"
+    # Only read when provider="anthropic" -- unchanged from the original Claude
+    # models, kept alive and selectable, not degraded.
+    llm_model_cheap_anthropic: str = "claude-haiku-4-5-20251001"
+    llm_model_strong_anthropic: str = "claude-sonnet-5"
     image_model: str = "gpt-image-2"
 
     # --- Supabase ---

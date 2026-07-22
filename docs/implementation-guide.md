@@ -607,10 +607,11 @@ Bake these in from Phase 3 so spend stays predictable:
 
 - **`IMAGE_QUALITY` flag** — the biggest lever. Start `medium`; run the duotone A/B early and, if indistinguishable, set `low` (≈8× cheaper images, pulling the whole app to ~$10/mo).
 - **`ENABLE_CRITIQUE`** — on by default (it's your quality moat and volume is tiny); a kill-switch if you ever need it.
-- **`ENABLE_PROMPT_CACHE`** — cache the system prompt + brand voice block across the three strong-tier calls per post (~90% off cached input).
-- **Model tiering** — angles and pitches on Haiku; only copy + critique on Sonnet. Never route pitches to the strong tier.
+- **`ENABLE_PROMPT_CACHE`** — **provider-conditional as of the OpenAI default (docs/logbook.md, `LLM_PROVIDER=openai`).** The original "~90% off cached input" figure only ever described Anthropic's explicit `cache_control: ephemeral` mechanic, which `LLMProvider._complete_anthropic()` still implements unchanged when `provider="anthropic"`. The default OpenAI path (`_complete_openai()`) has no equivalent explicit cache directive in this codebase — if `gpt-5.5`/`gpt-5.6-luna` cache repeated prompt prefixes automatically on OpenAI's side, it isn't something this code opts into or controls, and no discount figure for it has been confirmed. Don't assume the 90% figure carries over; treat OpenAI-path caching as unmeasured until real billing data says otherwise.
+- **Model tiering** — as of the provider migration, defaults to `gpt-5.6-luna` (cheap: angles, pitches) / `gpt-5.5` (strong: copy + critique + refine), selected via `LLM_PROVIDER`/`LLMProvider(provider=...)`. Never route pitches to the strong tier — unchanged. The original Haiku/Sonnet tiering remains fully available via `provider="anthropic"` (`LLM_MODEL_CHEAP_ANTHROPIC`/`LLM_MODEL_STRONG_ANTHROPIC`).
 - **Generate-on-tap** — daily picks precompute pitches only; full posts generate when tapped, so unopened picks cost almost nothing.
 - **Usage log** — log tokens + image count per generation to a `usage` table so you can see real monthly spend and which lever to pull.
+- **Real measured usage, one full single_image generation (angle + draft + critique + refine), post-migration:** cheap tier (`gpt-5.6-luna`) 308 input / 93 output tokens; strong tier (`gpt-5.5`) 3,776 input / 639 output tokens across the three strong-tier calls. Token counts are real, captured directly from the API; **dollar cost is deliberately not stated here** — no confirmed current per-token pricing for these specific models was available at migration time, and estimating one would risk stating a number nobody verified. Fill in from actual OpenAI billing once a real day of usage has accrued, per this section's own "usage log" guidance above.
 
 ---
 

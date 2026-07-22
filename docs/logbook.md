@@ -2484,6 +2484,230 @@ behavior). Full backend suite: **127/127 passing**, no test changes needed.
 
 ---
 
+## 40. LOCKED-DECISION REVERSAL — production text generation defaults to OpenAI (`gpt-5.6-luna`/`gpt-5.5`), Claude kept fully functional behind an explicit opt-in
+
+**Symptom / trigger:** Anthropic ran out of production credits entirely — every
+Claude call, cheap or strong tier, started failing
+(`anthropic.BadRequestError: Your credit balance is too low...`), breaking
+`/generate` end to end. Separately, real A/B testing on the isolated `/poc`
+direct-write path (`docs/direct-write-poc.md` Section 9, and a further
+7-trial round comparing `gpt-5.5` against a candidate `gpt-5.6-terra` model)
+had already produced real evidence that `gpt-5.5` matched or beat Sonnet 5 on
+anchor authenticity and voice discipline. Both facts together made this a
+deliberate, evidence-based decision to reverse `CLAUDE.md`'s locked model
+choice, not a stopgap patch.
+
+**What changed:** `app/providers/llm.py`'s `LLMProvider` now wraps either
+provider behind the same tier-based `complete(tier=...)` interface every
+caller already used (`angle_engine.py`, `generator.py`'s draft/critique/
+refine/regenerate_slide, `paste_link.py`'s summarization, `routes/picks.py`'s
+daily-pick pitches). Provider is resolved once per instance, never per-call:
+`LLMProvider()` (every existing call site, unchanged) now defaults to
+`provider="openai"` (`LLM_PROVIDER` env var, default `"openai"`), giving
+`gpt-5.6-luna` (cheap tier) / `gpt-5.5` (strong tier). The Claude path is
+**fully preserved, not degraded** — `LLMProvider(provider="anthropic")` per
+call, or `LLM_PROVIDER=anthropic` fleet-wide with no redeploy, both route to
+the exact original models (`LLM_MODEL_CHEAP_ANTHROPIC`/
+`LLM_MODEL_STRONG_ANTHROPIC`, defaulting to the original
+`claude-haiku-4-5-20251001`/`claude-sonnet-5`). Same explicit-opt-in shape
+the POC already used when `gpt-5.5` became its own default.
+
+**Key decision: text generation reuses the existing production
+`OPENAI_API_KEY`** (already used for GPT Image 2 hero images), not a new key
+and not the isolated `OPENAI_API_KEY_POC`. Reasoning: `OPENAI_API_KEY_POC`'s
+isolation exists specifically to keep an experimental, throwaway code path
+from touching production credentials — that rationale doesn't apply to
+production code isolating itself from itself. Reusing the existing key means
+zero new secrets were needed for this migration.
+
+**A real, previously-latent bug found and fixed in the same pass, not
+assumed away:** `gpt-5.5`/`gpt-5.6-luna` spend part of `max_completion_tokens`
+on invisible reasoning tokens before ever emitting visible content — the
+OpenAI-side equivalent of this same file's existing
+`thinking={"type": "disabled"}` fix for Sonnet 5's extended thinking, same
+failure class. Confirmed live at this codebase's real cheap-tier budgets
+(100–300 tokens): the entire budget was consumed by reasoning, content came
+back empty. Initially assumed the strong tier's wider budgets (400–1500)
+had enough headroom to not need the same fix — **disproven live**:
+`critique_post()`'s real single_image budget (500 tokens) against a
+realistic draft-length prompt also returned empty (500/500 tokens spent on
+reasoning, 0 on content). Reasoning-token consumption scales with prompt
+complexity, not a fixed per-call overhead, so no budget in this codebase's
+actual range was provably safe left at the model's default.
+`reasoning_effort="none"` applied unconditionally to every OpenAI call (both
+tiers) fixes it — confirmed live at every real production budget (150, 300,
+500, 1200, 1500): `reasoning_tokens=0`, full content returned every time.
+Shipping the naive default (reasoning left uncontrolled) would have silently
+broken every strong-tier call in production the first time critique ran
+against a real draft.
+
+**Verification, real trials, not code review:**
+- **Anthropic opt-in path** — confirmed structurally identical to
+  pre-migration (`provider="anthropic"` resolves to the exact original
+  `claude-haiku-4-5-20251001`/`claude-sonnet-5` models, same request shape).
+  A live round-trip currently fails with a real, expected
+  `credit balance too low` error — the exact real-world condition driving
+  this migration, not a defect in the migrated code.
+- **single_image draft → critique → refine, 4 real topics** (`mindset-self-doubt`,
+  `career-perfectionism`, `wellness-motivational`, and `mindset-attachment-styles`
+  — the last one `requires_citation: true`, exercising #14/#15's knowledge_hints
+  grounding path under the new models for the first time): all four ran
+  end to end with substantive critiques (none empty, post-fix) and
+  real refine changes. The citation-required trial's critique correctly ran
+  a "fabricated_specifics_check" and found no fabricated study, date, quote,
+  or unsafe statistic — #14/#15's grounding mechanism holds under the new
+  model. The gendered-dimension requirement (`_brief_system_prompt`'s "must
+  draw on why this topic specifically lands differently for a woman") was
+  correctly flagged by critique and correctly fixed by refine in 2 of 4
+  trials. Word limits held in all four (untolerant single_image cap,
+  unaffected by this migration). No forbidden/banned phrases, no CTA/closing
+  issues (structurally not applicable to single_image's one-slide shape).
+  **One real, worth-tracking finding, not attributed to the model swap
+  without evidence:** `career-perfectionism` (`stat_research` approach,
+  `requires_citation: false`) drafted an unclear acronym ("FNE"), which
+  critique correctly flagged as not delivering a real stat/finding — but
+  refine's fix replaced it with an unhedged, non-specific claim ("Women face
+  a tighter error margin") with no real number and no citation check
+  available to catch it, since `requires_citation` is per-topic, not
+  per-approach, and `stat_research` can be sampled for any topic including
+  non-citation ones. This looks like a pre-existing architectural gap
+  (any topic + `stat_research` + no citation requirement = no grounding
+  check fires at all) rather than a new regression from the model change —
+  no Claude-path comparison was possible to confirm either way, since
+  Anthropic has no credits — but it's real and worth a follow-up look
+  independent of this migration.
+- **Full backend suite: 127/127 passing**, both before and after the
+  `reasoning_effort` fix — no test changes needed, since every existing test
+  monkeypatches `LLMProvider` at the route-module level rather than
+  depending on its internals.
+- **Real token usage, one full single_image generation** (angle + draft +
+  critique + refine): cheap tier (`gpt-5.6-luna`) 308 input / 93 output
+  tokens; strong tier (`gpt-5.5`) 3,776 input / 639 output tokens across the
+  three strong-tier calls. Dollar cost deliberately not stated — no
+  confirmed current per-token pricing for these specific models was
+  available; see `docs/implementation-guide.md` Section 11 for the same
+  numbers and the same caveat.
+
+**`ENABLE_PROMPT_CACHE` re-examined, not assumed to carry over:** the flag's
+original "~90% off cached input" description is Anthropic-specific
+(`cache_control: {"type": "ephemeral"}`), still implemented unchanged in
+`_complete_anthropic()`. The OpenAI path has no equivalent explicit
+directive in this code — if `gpt-5.5`/`gpt-5.6-luna` cache repeated prompt
+prefixes automatically on OpenAI's side, this codebase doesn't opt into or
+control it, and no discount figure has been confirmed. Documented as
+unmeasured in `docs/implementation-guide.md` Section 11 rather than assumed.
+
+**Deviates from `CLAUDE.md`'s locked decisions — explicitly, not silently.**
+The "Models" line (Section: Locked decisions) is updated to show the
+reversal with a strikethrough, matching this project's existing practice for
+deliberate locked-decision deviations (masthead simplification #32,
+`voice_samples.direct` rewrite #30). Unlike those two, this one is fully
+reversible with no redeploy (`LLM_PROVIDER=anthropic`), and was driven by a
+hard external constraint (zero Anthropic credits) as well as evidence, not
+evidence alone.
+
+---
+
+## 41. LIVE BUG, already shipping — `single_stat`'s `number` field had no word cap, and a real production refine step overflowed it catastrophically
+
+**Symptom:** while scoping per-template word limits for a future carousel
+port, a real `single_image` migration trial (`career-perfectionism`, logbook
+#40) produced a refined `single_stat` slide with `number: "Women face a
+tighter error margin"` — a 5-word, 34-character generalization sitting in a
+field designed for a short numeral or stat like `"73%"`. Rendered through
+the real, unmodified `/api/render` Satori pipeline, this filled the **entire
+1080×1350 canvas with 5 lines of 200px text**, crowding out the kicker and
+supporting_line entirely. Confirmed with a real render before touching any
+code, not assumed from the JSON alone.
+
+**Root cause:** `number` was never bounded by anything. The combined
+`slide_text()` word check (`validator.py::_check_format`, pre-fix) summed
+`kicker` + `number` + `supporting_line` against one flat 30-word cap — a
+5-word `number` sitting next to a short `supporting_line` averaged out to a
+combined count that looked completely unremarkable, so nothing could ever
+have caught this via a whole-slide check. The field needed its own,
+independent range.
+
+**Fix:** `generator.py` gained `_SINGLE_STAT_NUMBER_WORD_RANGE = (1, 3)` and
+`_SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE = (15, 20)`, checked as two
+separate fields in `validator.py::_check_single_stat_fields` — not folded
+into the general per-slide word-range check other roles use
+(`_WORD_RANGE_FOR_ROLE`). The system prompt and critique_post's per-slide
+word guidance now state this explicitly for `single_stat`: *"number: 1-3
+words, a short numeral/stat only, never a sentence (this field renders at
+200px and overflows badly if long)."*
+
+**Verified, real renders, both ends of the new range:** `number` at 1 word
+(`"73%"`) and 3 words rendered cleanly, no overflow — the 3-word ceiling is
+visually large but contained, not the canvas-filling failure the uncapped
+field produced. `supporting_line` at 15 and 20 words both rendered cleanly.
+Regression tests added (`test_validate_post_flags_single_stat_number_field_overflow`
+reproduces the exact real failure — 6-word `number` — and asserts it's now
+caught; `test_validate_post_passes_single_stat_with_short_number_field`
+confirms the correct shape still passes clean). Full backend suite:
+**132/132 passing.**
+
+**Not a blueprint deviation** — this is a bug fix (a field with no bound
+that should always have had one), not a design change. Directly relevant to
+the still-open carousel-port scoping this was found during, but real and
+worth fixing on its own regardless of whether that port ever ships — this
+overflow could happen on any live `single_image`/`stat_research` generation
+today.
+
+---
+
+## 42. LIVE BUG, already shipping — `SingleQuote.tsx` had no vertical centering, leaving short quotes with large empty space at the bottom of the slide
+
+**Symptom:** found via the same per-template word-limit investigation as
+#41 — a real render of a real single_image migration output (a 22-word
+quote) filled only the top ~45% of the canvas, with the entire bottom half
+left empty. Every other slide template in this codebase
+(`CarouselBody`/`CarouselBodyTeaching`/`CarouselClosing`/`ConversationSlide`/
+`SingleStat`) wraps its content in a `flex: 1, justifyContent: "center"`
+container; `SingleQuote.tsx` was the one exception — a fixed `marginTop: 56`
+top-anchor with no centering and nothing below to fill the remaining space
+(unlike `CarouselCover`, whose hero image fills the bottom regardless of
+headline length).
+
+**Fix:** wrapped `SingleQuote`'s content in `flex: 1, justifyContent:
+"center"`, matching the other five templates' convention. Also reduced the
+quote text's `marginTop` from `240` (a spacing hack sized for the old
+top-anchored layout, positioning the text partway down behind the
+decorative giant quote-mark glyph) to `48`.
+
+**A real, unexpected finding while verifying this fix — reported honestly,
+not glossed over:** re-rendering at multiple word counts (1 word through 40
+words) showed the text block's vertical position does **not** change with
+content length at all — a control test on the already-working
+`carousel_closing` template (1-word vs. 20-word takeaway) showed the exact
+same behavior. This means Satori's `justify-content: center` does not
+dynamically recompute the centered position as content grows the way full
+browser CSS would — every flex-centered template in this codebase,
+including the five that were already considered "working," anchors near a
+fixed point rather than truly centering dynamically. This is a Satori
+CSS-subset limitation (`docs/implementation-guide.md`'s render section
+already documents Satori as a constrained subset, not full CSS), not a
+defect introduced by this fix. The practical result for `SingleQuote` is
+still a real, verified improvement — the anchor point moved from
+just-below-the-masthead (near the very top of the canvas) to the same
+mid-canvas point every other template already uses, which is a
+meaningfully better default position even without dynamic growth — but it
+is not a claim that quotes of any length now center "perfectly." Flagged
+here as a known, shared engine limitation rather than reopening this as an
+unresolved bug.
+
+**Verified, real renders:** short (10-word) and long (28-40 word) quotes
+both rendered at the corrected mid-canvas anchor point, confirmed against a
+direct before/after comparison with the original top-anchored render. No
+backend change, no test changes (this is frontend-only, not covered by the
+backend suite) — full backend suite still **132/132 passing**, confirming
+this fix didn't touch anything backend-adjacent.
+
+**Not a blueprint deviation** — a bug fix (a missing convention every
+sibling template already follows), not a design change.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -2498,3 +2722,4 @@ behavior). Full backend suite: **127/127 passing**, no test changes needed.
 | 32 | Masthead shows only `masthead_short` ("WGS") — the `{category} NO. {n}` text and its rule/separator, specified in blueprint Section 12, are no longer rendered | Explicit request to simplify what she sees on every slide; backend computation is untouched, so this is reversible in one file |
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
 | 39 | **OPEN/EXPERIMENTAL, 8 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues; round 7 added a real `carousel_conversation` slide (first structural, not prompt-only, change) and fixed a render-time emoji glyph gap; round 8 raised body slides 1–2 → 3 (6 slides total now, fixed regardless of approach), removed the hardcoded "with you," from display, relocated the real `brand_kit`-driven follow-us/handle line from the closing slide to the conversation slide (the true last slide as of round 7), added anti-padding/split guidance (adapted from an audited pattern in another project) and a 10% word-budget tolerance, corrected same-round to be carousel-only (was briefly universal by mistake) and extended to `validator.py` so the app's own warning banner agrees with what the model is told | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; all rounds implementation/local-verification only so far, none yet run through a real `/generate` call |
+| 40 | Production text generation (`LLMProvider`, all callers) defaults to `gpt-5.6-luna`/`gpt-5.5` (OpenAI) instead of the locked Claude Haiku 4.5/Sonnet 5 | Anthropic production credits ran out entirely, plus real A/B evidence gpt-5.5 matched/beat Sonnet 5 on anchor authenticity and voice discipline; Claude path fully preserved and reversible via `LLM_PROVIDER=anthropic`, no redeploy needed |
