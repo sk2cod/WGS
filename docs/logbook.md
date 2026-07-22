@@ -3539,6 +3539,60 @@ what the flag means.
 
 ---
 
+## 52. Body-slide word floor wasn't holding — a stated number alone wasn't enough, added an explicit count-and-check step
+
+**Symptom:** `carousel_body_teaching` slides (both taxonomy and paste-link
+direct-write) kept undershooting the 31-word floor in real output —
+first noticed in #44's own testing (2 of 4 fresh topics tripped it,
+logged as "a real, unaddressed mild-undershoot tendency" at the time) and
+confirmed still happening in live use since. The prompt already stated
+the target as a number ("Target {lo}-{hi} words combined",
+`_carousel_direct_body_distillation_instruction()`) — that alone wasn't
+enough to hold the floor.
+
+**Fix:** added an explicit count-and-check self-check step to the same
+function, the identical pattern already hardened once for the isolated
+POC's own rule 13 (`docs/direct-write-poc.md` Section 9 — a soft
+"sparingly" instruction didn't hold there either, until it became an
+explicit count-then-correct step with a hard cap). The new text
+instructs the model to count each body slide's heading+beat words before
+finalizing, and if under the floor, treat it as underdeveloped (not just
+concise) and expand with one more concrete sensory or narrative detail
+actually from that moment — explicitly not padding with a restated idea
+or generic elaboration, since that would trade one failure mode
+(undershoot) for another this prompt already rules out elsewhere (rule
+9's beat-restatement check). Shared by both direct-write entry points
+(`_carousel_direct_system_prompt` and
+`_carousel_direct_paste_link_system_prompt` both call this same function),
+so the fix applies to paste-link's port (logbook #51) too, not just the
+taxonomy path this was first found on.
+
+**Re-verified with fresh real trials, not just confirming the instruction
+was added:** ran 5 fresh real `/generate` calls (`CAROUSEL_WRITER=direct_write`,
+the real default) against a random sample of taxonomy topics spanning
+both citation and non-citation requirements
+(`society-invisible-labor`, `relationships-burnout`,
+`wellness-stress-regulation`, `health-reproductive-health`,
+`wellness-rest`) — real API calls, real Satori-shaped output, not mocked.
+All 15 `carousel_body_teaching` slides across the 5 trials (3 per post)
+landed inside the 31-55 word range; `validation_errors` was empty on
+every single trial (previously 2 of 4 fresh topics tripped this same
+floor under the old number-only instruction). Read the full caption and
+all three body slides for two of the five trials in full to check the
+self-check hadn't traded undershoot for padding/repetition — both read as
+genuinely concrete and distinct beat-by-beat (e.g. "Four uneven lines in
+blue ink," "camera face steady while her thumb moves over a tiny
+square"), no generic filler or restated ideas found.
+
+Full backend suite 137/137 (prompt-text-only change, no parsing/logic
+touched, so the count is unchanged from logbook #51).
+
+**Not a blueprint deviation** — a prompt-reliability fix for an already-
+tracked, already-open issue (deviations table, row 43-46's "real,
+unaddressed mild-undershoot tendency"), not a new design decision.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |

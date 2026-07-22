@@ -1179,6 +1179,17 @@ def _carousel_direct_body_distillation_instruction() -> str:
     # (docs/direct-write-poc.md Section 11: reworded, not copied, same
     # image/idea in a fresh sentence) rather than the "compress to one sharp
     # line" instruction carousel_body's much smaller range required.
+    #
+    # Logbook #52: stating the target as a number alone wasn't holding --
+    # real output (#44's own testing, then live use) kept undershooting the
+    # floor. Added an explicit count-and-check self-check step, same pattern
+    # already hardened once for the POC's own rule 13 (docs/direct-write-poc.md
+    # Section 9 -- a soft "sparingly" version didn't hold either, until it
+    # became an explicit count-then-correct step). The correction is
+    # deliberately "expand with more concrete detail," not "add words" --
+    # padding/repetition to hit a number would trade one failure mode for
+    # another already ruled out elsewhere in this prompt (rule 9's
+    # restatement check).
     lo, hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_body_teaching"])
     return (
         "After the caption is complete, select 3 of its real beats — in order, "
@@ -1191,7 +1202,12 @@ def _carousel_direct_body_distillation_instruction() -> str:
         "beat is about in plain, concrete terms — not a teaching-style label, "
         "not a restatement of the sentence that follows it, just enough to "
         f"give the slide its own lead-in. Target {lo}-{hi} words combined "
-        "across the heading and the retold beat."
+        "across the heading and the retold beat. Before finalizing each body "
+        "slide, count its heading and retold beat together. If the count is "
+        f"under {lo}, the beat is underdeveloped, not just concise — expand it "
+        "with one more concrete sensory or narrative detail actually from that "
+        "moment (what was seen, said, felt, or done) until it clears the floor, "
+        "rather than padding with a restated idea or a generic elaboration."
     )
 
 
