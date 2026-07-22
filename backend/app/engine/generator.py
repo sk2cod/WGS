@@ -15,9 +15,11 @@ from __future__ import annotations
 import json
 import math
 
+from app.engine.angle_engine import DEFAULT_MOOD, VALID_MOODS, CarouselContext
 from app.models.brand_kit import BrandKit
 from app.models.brief import ContentBrief
 from app.models.enums import Format
+from app.models.topic import Topic
 from app.models.post import (
     BodySlide,
     BodyTeachingSlide,
@@ -484,23 +486,23 @@ def _citation_mode(brief: ContentBrief) -> str:
     return "none"
 
 
-def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[SlideRole]) -> str:
-    voice_lines = "\n".join(f"- {s}" for s in brief.brand_voice_samples)
-    forbidden = ", ".join(brand_kit.forbidden) or "none"
-
-    citation_block = ""
+def _citation_instruction_block(brief: ContentBrief) -> str:
+    """Shared by _brief_system_prompt and the carousel direct-write port
+    (_carousel_direct_system_prompt) so the two paths can never drift on
+    wording — the knowledge_hints grounding text is exactly the fix logbook
+    #14 shipped, reused verbatim rather than re-derived."""
     citation_mode = _citation_mode(brief)
     if citation_mode == "sources":
         source_lines = "\n".join(
             f"- {s.title} ({s.url or 'no url'}): {s.excerpt}" for s in brief.sources
         )
-        citation_block = (
+        return (
             "This post REQUIRES citation — every factual claim must be traceable to "
             f"these sources, never invented from memory:\n{source_lines}\n"
         )
-    elif citation_mode == "knowledge_hints":
+    if citation_mode == "knowledge_hints":
         hints = "; ".join(brief.knowledge_hints)
-        citation_block = (
+        return (
             "This post touches on factual claims. Stay within well-established, "
             f"widely-known public knowledge on this: {hints}. Do not invent a "
             "specific number, named study, quote, date, or precise statistic you "
@@ -508,6 +510,14 @@ def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[S
             "the pattern qualitatively rather than citing a precise stat you "
             "can't verify.\n"
         )
+    return ""
+
+
+def _brief_system_prompt(brief: ContentBrief, brand_kit: BrandKit, roles: list[SlideRole]) -> str:
+    voice_lines = "\n".join(f"- {s}" for s in brief.brand_voice_samples)
+    forbidden = ", ".join(brand_kit.forbidden) or "none"
+
+    citation_block = _citation_instruction_block(brief)
 
     kicker_block = f"\n{_KICKER_INSTRUCTION}\n" if "carousel_cover" in roles else ""
 
@@ -884,3 +894,440 @@ def regenerate_slide(
     raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=400)
     raw_slide = json.loads(strip_json_fence(raw))
     return _build_slide(role, raw_slide, brand_kit)
+
+
+# ============================================================================
+# Carousel direct-write port (docs/logbook.md #43) -- OPEN, EXPERIMENTAL.
+# Replaces the v1 checklist-patched writer (logbook #39: draft_post ->
+# critique_post -> refine_post, sample_cell-dictated angle) for carousel ONLY,
+# with the single-call design validated across this session's real testing
+# (docs/direct-write-poc.md, the port test harness in logbook #40's
+# investigation): one strong-tier call, free anchor pick guided by context
+# rather than a dictated sub-concept/approach/entry-point cell, caption
+# written first as the real piece. single_image is completely untouched --
+# draft_post/critique_post/refine_post/generate_post above are still exactly
+# what single_image uses, unmodified.
+#
+# Voice register is hardcoded to "poetic", not resolved via APPROACH_REGISTER
+# -- there is no approach on this path to resolve it from (see below), and
+# poetic is what carousel's already-restricted CAROUSEL_V1_APPROACHES pool
+# (story/question_reflection, logbook #39) already implied for every carousel
+# post before this. brief.approach is set by the caller to Approach.STORY as
+# pure plumbing, not a real signal this path reads or reasons about --
+# chosen specifically because it's the sole member CAROUSEL_V1_APPROACHES and
+# TEACHING_BODY_APPROACHES have in common (confirmed by direct cross-check,
+# docs/logbook.md), so slide_roles_for(brief) already resolves to
+# carousel_body_teaching (routed here in logbook #44 for the extra room its
+# 35-50 word range gives, up from carousel_body's 10-20) with zero changes to
+# that function -- this also keeps validator.py's independent
+# slide_roles_for(brief) call (_check_format) in agreement with what this
+# writer's own parsing actually produces; picking an approach outside
+# TEACHING_BODY_APPROACHES here would silently mismatch the two. Confirmed:
+# this function never reads brief.approach or brief.entry_point for anything
+# else, and never calls sample_cell/generate_angle.
+# ============================================================================
+
+# Deliberately NOT reusing _VOICE_INSTRUCTION (direct "you"-address,
+# conversational-equals framing) or the _CAROUSEL_V1_* content-quality
+# instructions above -- both were written for the checklist-patched writer
+# this port replaces, and _VOICE_INSTRUCTION's direct-address framing
+# actively contradicts rule 11 below (storyteller voice, avoid addressing an
+# undefined reader), which is validated, not incidental. This prompt's voice
+# foundation is ported from app/poc/prompt.py instead, adapted for
+# production's actual slide shapes -- see the body-distillation instruction
+# below for the biggest adaptation.
+
+_CAROUSEL_DIRECT_BANNED_PHRASES = (
+    "you are enough",
+    "choose yourself",
+    "protect your peace",
+    "healing isn't linear",
+    "you deserve",
+    "give yourself permission",
+    "trust the process",
+    "everything happens for a reason",
+)
+
+# Rules 1-12, ported from app/poc/prompt.py (rules 1-12; rule 13, the
+# selective-line-break rule, is dropped -- it existed for the POC's own
+# single freeform-paragraph-per-slide template; production's body slides are
+# a heading + a short paragraph across two separate fields, not one paragraph
+# that could contain an internal line break, and the caption field isn't
+# Satori-rendered at all). Adapted in three places: rule 2 now also excludes
+# this topic's recent anchors; rule 7 and rule 9 each gained a clause
+# connecting the caption-level instruction to the two explicit fields
+# (closing_takeaway, the three body slides' heading + retold beat) this production shape
+# asks for that the POC's own JSON never had.
+_CAROUSEL_DIRECT_RULES = """1. Open inside a specific, concrete scene — a person doing a small, particular
+thing. Withhold the meaning of the detail for a beat. Never open with a
+definition. (Naming the anchor immediately, in the first sentence, is also
+valid when the anchor is striking enough on its own.) By the caption's second
+beat at the latest, include at least one clause, phrase, or beat that gestures
+toward the reader's own life — a single wondering, comparison, or echo is
+enough; you do not need to explain the connection yet, only signal that one is
+coming. Before finalizing, check: does the caption's first or second beat
+contain that signal? If the caption stays entirely inside the anchor's own
+history, mechanics, or terminology through its third beat with no such signal
+anywhere yet, add one now rather than waiting for later.
+
+2. Before settling on your anchor, think of 3 real candidates — genuine
+historical practices, words, traditions, or scientific observations you are
+highly confident actually exist and are documented, not paraphrases or
+composites of things you've encountered. For each candidate, ask yourself
+directly: could you point to where this is documented, or are you blending
+several half-remembered things into something that sounds right? Discard any
+candidate you can't answer that question confidently for, and discard any
+candidate that appears in this topic's recently-used anchors below. Choose the
+strongest of what remains. If none of your 3 candidates are ones you're
+genuinely confident about, generate 3 more rather than proceeding with a
+shaky one. The topic word itself should almost never be the anchor — the
+anchor is something else entirely that the topic's meaning emerges through.
+
+3. Stay with this one anchor for the entire piece. Never introduce a second,
+unrelated anchor partway through — deepen the one you opened with instead.
+
+4. If you cite a real person, study, or source, delay and soften the
+attribution — let the idea land first, then introduce who found it, never
+lead with a title. Prefer a role only ("a psychiatrist," "a marine
+biologist," "a historian") over a real name. A named, real researcher turns
+the moment into a citation rather than a discovery, even when delayed. Only
+name someone when their specific identity is itself part of why the anchor
+matters.
+
+5. Tentative language — "perhaps," "I wonder," "maybe," "somewhere along the
+way," "as though" — belongs at genuine reflective turns, the moments the
+piece shifts from observation toward meaning. A story can have more than one
+such turn. Never repeat it within the same beat, and never let it become the
+default voice of a plain declarative sentence.
+
+6. When you state what changes or what it means, make the subject of the
+sentence a person or a physical thing doing something you could picture —
+never an abstract noun (comfort, love, guilt, the feeling) performing an
+action on its own. If you can't draw the sentence, rewrite it.
+
+7. Close the caption by echoing something from the opening — a phrase, an
+image, a detail — quietly returned to, not a new thought introduced. The
+closing_takeaway field (see below) should do the same at the level of one
+line: a plain declarative echo, never a literal question, even when the
+piece's own arc turned on one earlier.
+
+8. Never give an instruction or command to the reader. The reader arrives at
+the meaning themselves.
+
+9. The caption needs to actually travel: 4 to 7 real distinct beats. Every
+beat must do a genuinely different job than the one before it (for example:
+curiosity, then the anchor revealed, then why it mattered, then a turn toward
+the reader, then the emotional truth, then an echo of the opening — not every
+piece needs all of these, and not in this exact order, but each beat must
+move the piece somewhere new). Never spend two consecutive beats making
+substantially the same point in different words. Do not pad the caption with
+more beats than the content genuinely earns. Before finalizing, check each
+adjacent pair of beats: does the second one state a claim, or restate the one
+before it using different words? If it's a restatement, cut it or replace it
+with something that adds new ground. The three body-slide distillations (see
+below) are pulled from this same beat structure, so getting the beats
+genuinely distinct here is what makes the distillations distinct too.
+
+10. Any biographical or factual detail you can't be fully certain of gets a
+soft hedge ("said to," "known as," "believed to") rather than stated as flat
+fact.
+
+11. Write like a storyteller pulling the reader into one real scene, never
+like an essay addressing an audience. Stay inside one specific person's
+experience or one confident, unaddressed observation — never generalize the
+reflective turn to a demographic or group ("I wonder how many women feel
+this," "so many of us," "many people know this"). The universal feeling
+should arrive because the specific detail was true, not because you named
+who else might relate to it. Avoid hedged, invitational phrasing that
+gestures at an undefined reader ("if you looked closely, you might
+notice...," "you may have noticed...") — state what's true directly and
+trust the detail to carry its own weight.
+
+12. Punctuation should shape how a reader hears the sentence, not just close
+it grammatically. Use a period where a thought genuinely stops. Use a comma
+only for a light breath inside one continuous thought, never to splice two
+complete sentences together. Use an em dash for a beat that turns,
+interrupts, or lands a reveal. Break a sentence into two rather than
+stacking three or more clauses behind commas."""
+
+_CAROUSEL_DIRECT_EXAMPLES = """Four examples of the finished style — study the underlying principles, not
+which specific opening move or how many turns each one uses; both an
+immediate-naming opening and a withhold-and-reveal opening are valid:
+
+Example A (names the anchor immediately, four separate reflective turns):
+In many Japanese shrines, there's no wall to tell you you've arrived somewhere
+sacred. Instead, there's a thick rope, twisted from rice straw. It's called a
+shimenawa. It doesn't stop anyone from entering. It simply whispers: this
+place is different.
+No gate. No guard. No lock. Just a rope... and a quiet understanding that not
+every space should be entered in the same way. Sometimes meaning is stronger
+than force. I wonder if this is closer to what a boundary is supposed to feel
+like.
+Not walls built in fear. Not battles waiting to happen. Just a gentle way of
+saying, "This part of me deserves care."
+Somewhere along the way, I learned that protecting my peace required an
+explanation. That "no" should sound kinder. That "not now" should
+come wrapped in guilt. As though my boundaries needed permission before they
+could exist.
+But the rope never explains itself. It doesn't convince. It doesn't
+apologise. It simply knows what it is protecting. Perhaps that's why it is
+respected.
+Maybe that's the invitation. To stop building walls so high that no one can
+reach me... and begin placing ropes clear enough that people know how to meet
+me. The strongest boundaries don't always push people away. Sometimes they
+simply show people how to come closer — with care.
+
+Example B (names the anchor after one beat of scene-setting):
+Imagine if the earth was given permission to rest. Not after it failed. Not
+after it was exhausted. Simply because rest was considered part of living
+well. Thousands of years ago, it was.
+In an ancient Hebrew tradition, every seventh year the land was left
+untouched. No planting. No harvesting. No asking it for one more season. This
+practice was called Shmita. A permission the earth received without
+asking — the kind I still find hard to give myself.
+The land wasn't resting because it had stopped being useful. It rested
+because usefulness was never meant to come without renewal. Even the richest
+soil was trusted to become still.
+I wonder when I stopped extending myself the same kindness. Somewhere
+along the way, rest became something I had to earn. Something reserved for
+burnout. As though exhaustion were proof that I'd worked hard enough. The
+earth was never asked to wait that long.
+Maybe we've misunderstood what rest is. Not a reward. Not an interruption.
+Not time lost. Perhaps it has always been part of the work itself. Just as
+winter belongs to the tree, rest belongs to growth.
+You are not a field in constant harvest. Some seasons ask you to bloom.
+Others ask you to become quiet beneath the surface. Neither season is more
+valuable than the other. Roots grow in both.
+
+Example C (withholds the anchor one beat, one restrained turn):
+Before she left for the date, her grandmother pressed a coin into her palm.
+Not for anything, she said. Just in case.
+It had a name — mad money. Kept separate from whatever a man might pay for
+that night, hidden in a shoe or sewn into a hem. Enough for a cab home.
+Enough to never need to ask.
+It wasn't much, most of the time. A dime, later a dollar. It didn't need to
+be much. It only needed to exist.
+What no one tells you: it was never really about the money. It was about the
+night never being able to trap you in it.
+The coin usually came home unspent. It didn't need spending to have done its
+job. It just needed to be there.
+
+Example D (withholds the anchor one beat, one restrained turn):
+She used to call most nights around eleven, no real reason, no agenda. I'd
+pick up mid-thought and somehow already know what she needed before she got
+to the point.
+There's a word for that kind of understanding — the kind that arrives before
+you've had to ask for it. In Japanese, it's called amae.
+A psychiatrist spent years trying to explain it. He traced it all the way
+back to infancy — to a mother reading her child's needs before the child even
+has language for them.
+What no one tells you: amae only survives if both people stay who they were.
+Somewhere in the growing, the calls stopped landing the way they used to.
+The understanding didn't leave because it wasn't real. It left because I'd
+become someone it hadn't met yet."""
+
+
+def _carousel_direct_context_block(topic: Topic, context: CarouselContext) -> str:
+    lines = [f"Topic: {topic.name}", f"Category: {context.category}"]
+    if context.seed_angles:
+        lines.append(
+            "Seed angles (context only, to help you understand what this topic "
+            "means in this category — pick your own anchor freely, these are not "
+            "requirements): " + "; ".join(context.seed_angles)
+        )
+    if context.recent_anchors:
+        lines.append(
+            "This topic's recently-used anchors — do not reuse any of these, per "
+            "rule 2: " + "; ".join(context.recent_anchors)
+        )
+    return "\n".join(lines)
+
+
+def _carousel_direct_body_distillation_instruction() -> str:
+    # Routed to carousel_body_teaching (logbook #44), not carousel_body -- the
+    # extra room (35-50 words vs. 10-20) is enough for a real retelling of a
+    # beat, not just a compressed statement fragment, so this instruction now
+    # matches the isolated POC's own already-validated slide-writing pattern
+    # (docs/direct-write-poc.md Section 11: reworded, not copied, same
+    # image/idea in a fresh sentence) rather than the "compress to one sharp
+    # line" instruction carousel_body's much smaller range required.
+    lo, hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_body_teaching"])
+    return (
+        "After the caption is complete, select 3 of its real beats — in order, "
+        "spanning the arc's actual development, not three variations on the "
+        "opening — and retell each one fresh for its own slide: same moment, "
+        "same image, same idea, in a different sentence. A reader may see both "
+        "the slides and the caption on the same post, so a slide must never "
+        "reuse the caption's own sentence almost word for word. Each slide "
+        "also needs a heading: a short phrase, a few words, naming what the "
+        "beat is about in plain, concrete terms — not a teaching-style label, "
+        "not a restatement of the sentence that follows it, just enough to "
+        f"give the slide its own lead-in. Target {lo}-{hi} words combined "
+        "across the heading and the retold beat."
+    )
+
+
+def _carousel_direct_cover_instruction() -> str:
+    return (
+        "Also write the cover: headline_word is one bold structural word or short "
+        "phrase drawn from the anchor or its central image (not the topic name "
+        "itself). script_word is one short script-accent phrase. "
+        f"{_KICKER_INSTRUCTION}"
+    )
+
+
+def _carousel_direct_mood_instruction() -> str:
+    return (
+        'Also tag the piece\'s mood as exactly one of "wisdom", "bold", or '
+        '"celebratory": wisdom for reflective/analytical pieces, bold for '
+        "declarative/confident ones, celebratory for milestone/win pieces."
+    )
+
+
+def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, topic: Topic, context: CarouselContext) -> str:
+    voice_lines = "\n".join(f"- {s}" for s in brand_kit.voice_samples.poetic)
+    forbidden = ", ".join(brand_kit.forbidden) or "none"
+    banned_phrases = ", ".join(f'"{p}"' for p in _CAROUSEL_DIRECT_BANNED_PHRASES)
+    citation_block = _citation_instruction_block(brief)
+
+    closing_lo, closing_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_closing"])
+    conv_lo, conv_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_conversation"])
+
+    return (
+        f"You are the writer for {brand_kit.brand_name} — for {brand_kit.audience} "
+        f"Niche: {brand_kit.niche}\n\n"
+        "The content itself — not just the tone — must draw on why this topic "
+        "specifically lands differently for a woman: the particular pressure, "
+        "socialization pattern, or double standard at play. Generic advice that "
+        "would apply equally to anyone is not acceptable; the gendered dimension "
+        "must be visible in the actual text.\n\n"
+        f"Never sound: {forbidden}.\n\n"
+        f"Never write any of these exact phrases or close paraphrases of them — "
+        f"they are Instagram wallpaper text, the opposite of this brand's voice: "
+        f"{banned_phrases}.\n\n"
+        f"Reference voice — match this register, don't copy it:\n{voice_lines}\n\n"
+        f"{_CAROUSEL_DIRECT_RULES}\n\n"
+        f"{_CAROUSEL_DIRECT_EXAMPLES}\n\n"
+        "The anchor field must contain only your final chosen anchor, a few words, "
+        "no reasoning or alternatives — do your comparison silently, output only "
+        "the result.\n\n"
+        f"{_carousel_direct_mood_instruction()}\n\n"
+        "Write the caption before anything else. The caption is the real piece — "
+        "write it exactly as you would if slides didn't exist, one continuous "
+        "flowing telling, start to finish, with the beat structure rule 9 "
+        "describes built into its own sentences.\n\n"
+        f"{_carousel_direct_body_distillation_instruction()}\n\n"
+        f"{_carousel_direct_cover_instruction()}\n\n"
+        f"closing_takeaway: one declarative line, {closing_lo}-{closing_hi} words — "
+        "see rule 7.\n\n"
+        f"conversation_question: one genuine, open, unresolved question tied "
+        f"directly to this anchor, {conv_lo}-{conv_hi} words, for the reader to "
+        "sit with.\n\n"
+        f"{citation_block}\n"
+        "Also write 5-10 hashtags.\n\n"
+        "Output as JSON:\n"
+        "{\n"
+        '  "anchor": "<the specific real thing this piece is built around, in a '
+        'few words>",\n'
+        '  "mood": "wisdom | bold | celebratory",\n'
+        '  "caption": "<the full piece, written first, start to finish, in '
+        'flowing prose>",\n'
+        '  "headline_word": "...", "script_word": "...", "kicker": "...",\n'
+        '  "body_1_heading": "...", "body_1_text": "...",\n'
+        '  "body_2_heading": "...", "body_2_text": "...",\n'
+        '  "body_3_heading": "...", "body_3_text": "...",\n'
+        f'  "closing_takeaway": "<{closing_lo}-{closing_hi} words>",\n'
+        '  "conversation_question": "...",\n'
+        '  "hashtags": ["...", ...]\n'
+        "}\n\n"
+        f"{_carousel_direct_context_block(topic, context)}"
+    )
+
+
+def _parse_carousel_direct_response(raw: str, brand_kit: BrandKit) -> tuple[GeneratedPost, str, str]:
+    data = json.loads(strip_json_fence(raw))
+
+    anchor = str(data.get("anchor") or "").strip()
+    mood = str(data.get("mood") or "").strip().lower()
+    if mood not in VALID_MOODS:
+        mood = DEFAULT_MOOD
+
+    raw_slides = [
+        {
+            "headline_word": data.get("headline_word", ""),
+            "script_word": data.get("script_word", ""),
+            "kicker": data.get("kicker", ""),
+        },
+        {
+            "heading": data.get("body_1_heading", ""),
+            "body": data.get("body_1_text", ""),
+        },
+        {
+            "heading": data.get("body_2_heading", ""),
+            "body": data.get("body_2_text", ""),
+        },
+        {
+            "heading": data.get("body_3_heading", ""),
+            "body": data.get("body_3_text", ""),
+        },
+        {"takeaway": data.get("closing_takeaway", "")},
+        {"question": data.get("conversation_question", "")},
+    ]
+    # Routed to carousel_body_teaching, not carousel_body (logbook #44) -- see
+    # this section's opening comment block for why brief.approach must be
+    # Approach.STORY for this to stay consistent with validator.py's own
+    # independent slide_roles_for(brief) call.
+    roles: list[SlideRole] = [
+        "carousel_cover",
+        "carousel_body_teaching",
+        "carousel_body_teaching",
+        "carousel_body_teaching",
+        "carousel_closing",
+        "carousel_conversation",
+    ]
+    slides = [_build_slide(role, raw_slide, brand_kit) for role, raw_slide in zip(roles, raw_slides)]
+    post = GeneratedPost(
+        slides=slides,
+        caption=str(data.get("caption", "")),
+        hashtags=[str(h) for h in data.get("hashtags", [])],
+    )
+    return post, anchor, mood
+
+
+def draft_carousel_direct(
+    brief: ContentBrief,
+    brand_kit: BrandKit,
+    llm: LLMProvider,
+    topic: Topic,
+    context: CarouselContext,
+) -> tuple[GeneratedPost, str, str]:
+    """The carousel direct-write port's single call — no draft/critique/refine
+    loop. `brief` is a caller-supplied, provisional ContentBrief: its
+    `requires_citation`/`sources`/`knowledge_hints`/`format` are real and used
+    (for _citation_instruction_block), but its `angle`/`mood` are not read
+    here and should be treated as placeholders by the caller, since on this
+    path both are only known once this call returns — unlike sample_cell/
+    generate_angle, where they're decided before any writing starts. Callers
+    should correct brief.angle/brief.mood/brief.hero_image_prompt from this
+    function's returned (anchor, mood) before using the brief for
+    validate_post or a MemoryRecord write.
+
+    No critique_post/refine_post call on this path, deliberately -- not an
+    oversight. This mirrors what direct-write's isolated POC testing already
+    found in `docs/direct-write-poc.md` Section 5 (direct-write outperformed
+    eight rounds of patching the checklist-based prompt this replaces) and
+    what the carousel-only real-content trials in this session's port test
+    harness (docs/logbook.md #40's investigation) found: the single-call
+    design held up cleanly against the specific failure modes the critique/
+    refine backstops exist to catch (closing-declarative drift, reader-
+    address leaking into a body slide) across every trial run. That evidence
+    is real but from a small sample -- a handful of trials across a handful
+    of topics, not the volume the checklist-based writer's backstops were
+    hardened against over many logbook #39 rounds. If a future round of real
+    output review finds the failure modes returning at scale, adding a
+    narrow critique pass back for this path specifically (not the full
+    three-call loop) is the documented next step, not a surprise."""
+    system = _carousel_direct_system_prompt(brief, brand_kit, topic, context)
+    prompt = "Write the piece now. Output only the JSON object described above, nothing else."
+    raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=2000)
+    return _parse_carousel_direct_response(raw, brand_kit)

@@ -61,8 +61,23 @@ create table if not exists memory (
     -- (logbook #35 fix): a training failure must not permanently strand the record
     -- with no way to retry just the training half, which is what a single shared
     -- idempotency guard on status alone caused before this column existed.
-    voice_trained_at timestamptz
+    voice_trained_at timestamptz,
+    -- Added for the carousel direct-write port (logbook #43): the model's own
+    -- freely-chosen anchor (e.g. "ha-ha wall", "Plimsoll line"), read back by
+    -- engine/angle_engine.py::assemble_carousel_context() as this topic's
+    -- recent-anchors avoid-list. Empty for every pre-existing record and for
+    -- single_image's unchanged sample_cell/generate_angle path, which has no
+    -- equivalent concept -- same optional-by-default shape as caption/slides
+    -- above, not a required field.
+    anchor text not null default ''
 );
+
+-- `create table if not exists` above is a no-op against the already-live
+-- production table -- this explicit, idempotent ALTER is what actually adds
+-- the column there when this file is re-run (same gap this file has always
+-- had for every column added after initial launch; made explicit here rather
+-- than silently relying on a manual dashboard edit).
+alter table memory add column if not exists anchor text not null default '';
 
 create index if not exists memory_category_status_idx on memory (category, status);
 create index if not exists memory_fingerprint_idx on memory (fingerprint);

@@ -33,6 +33,12 @@ class MemoryRecord(BaseModel):
     # from `status`/`exported_at` (logbook #35) so a training failure doesn't
     # permanently forfeit the ability to retry just the training half.
     voice_trained_at: datetime | None = None
+    # The model's own freely-chosen anchor (logbook #43, carousel direct-write
+    # port) -- empty for single_image and every pre-existing record, which have
+    # no equivalent concept. Read back by
+    # angle_engine.assemble_carousel_context() as this topic's recent-anchors
+    # avoid-list.
+    anchor: str = ""
 
 
 def next_masthead_number(category: str, memory: list[MemoryRecord]) -> str:

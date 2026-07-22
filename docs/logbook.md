@@ -2708,6 +2708,288 @@ sibling template already follows), not a design change.
 
 ---
 
+## 43. OPEN, EXPERIMENTAL — carousel direct-write port: single-call writer replacing draft→critique→refine, carousel only
+
+**What this is:** the production carousel writer's biggest structural change
+since the v1 checklist experiment (#39) — not another prompt patch on top of
+`draft_post → critique_post → refine_post`, but a full replacement of that
+loop for carousel with the single-call, free-anchor-pick design validated
+across this session's POC testing (`docs/direct-write-poc.md`) and the port
+test harness investigated in #40. `single_image` is completely untouched —
+`draft_post`/`critique_post`/`refine_post`/`generate_post` still exist,
+unmodified, and are exactly what `single_image` still calls.
+
+**`angle_engine.py`: `assemble_carousel_context()`, pure Python, no LLM
+call.** Replaces `sample_cell()`/`generate_angle()` for this path — pulls
+`topic.primary_category`, all of `topic.seed_angles` (not one sampled
+sub-concept), `topic.knowledge_hints` when `requires_citation`, and this
+topic's own recorded anchors from memory (the avoid-list). Confirmed by
+reading the function: it never calls `sample_cell`/`generate_angle`, and
+never reads `approach` or `entry_point` — both concepts don't exist on this
+path at all, and stay used only by `single_image`'s unchanged one.
+
+**`memory` table: new `anchor` column**, same additive pattern as
+`caption`/`slides`/`exported_at` (#35) and `anchor`'s own introduction to
+`MemoryRecord` and `schema.sql` in this same round of work — a
+`create table if not exists`-block addition plus an explicit
+`alter table memory add column if not exists`, since the block alone is a
+no-op against the already-live production table (a gap this file has always
+had for post-launch columns, made explicit here rather than left implicit).
+Empty for every pre-existing record and for `single_image`.
+
+**`generator.py`: `draft_carousel_direct()`, one strong-tier call.** No
+provider wiring needed — inherits the `gpt-5.5` default from the completed
+migration (#40). Implements POC rules 1-12 (rule 13, selective line breaks,
+dropped — it existed for the POC's own freeform-paragraph slide template,
+which has no equivalent in production's typed slide fields), category +
+seed_angles as context the model can freely use or ignore (not a dictated
+cell), knowledge_hints-conditional grounding via the *same*
+`_citation_mode()` dispatcher `single_image` still uses (factored the
+citation instruction text into a new shared `_citation_instruction_block()`
+so the two paths can't drift on wording), the anchor avoid-list, and mood
+folded into the same JSON call rather than a separate cheap-tier tagging
+call. Voice register hardcoded to `"poetic"` — not resolved via
+`APPROACH_REGISTER`, since there is no sampled approach on this path to
+resolve it from.
+
+**The `approach` field is real plumbing, not a real signal — flagged
+explicitly, not left implicit.** `ContentBrief.approach` is a required field
+with no default, and `slide_roles_for()` and `validate_post()` both key off
+it. The caller sets it to `Approach.QUESTION_REFLECTION` for every post on
+this path — chosen specifically because it's the one
+`CAROUSEL_V1_APPROACHES` member *not* in `TEACHING_BODY_APPROACHES`, so
+`slide_roles_for()` already resolves to plain `carousel_body` (never
+`carousel_body_teaching`) with zero changes to that function, and already
+resolves to `"poetic"` via `APPROACH_REGISTER` if anything downstream reads
+it that way. `draft_carousel_direct()` itself never reads `brief.approach`
+for anything.
+
+**A real sequencing decision, also flagged rather than glossed over:**
+`mood` is decided by the same single call that writes the content, but
+`build_brief()` needs `mood` (and `angle`) as *inputs*. There's no way to
+sample them first the way `generate_angle()` used to. The resolution:
+callers build a **provisional** brief first (`angle`/`mood` as clearly
+labeled placeholders — only `requires_citation`/`sources`/`knowledge_hints`/
+`format` are real and used, for the citation instruction), call
+`draft_carousel_direct()`, then correct `brief.angle`/`brief.mood` from its
+returned `(post, anchor, mood)` before passing the brief to `validate_post`
+or writing a `MemoryRecord`. `fingerprint` for the repetition check is
+`f"{topic_id}:{anchor}"` — the natural analog of the old
+`topic_id:sub_concept:approach` fingerprint now that anchor, not sub-concept,
+is the thing that shouldn't repeat. This function-level engine work is in
+scope here; wiring it into `routes/generate.py` end-to-end (including hero
+image sequencing) is explicitly not — that's the next piece, not done yet.
+
+**Body slides: a real adaptation, not a literal POC port.** The POC's own
+slides are full paragraphs; production's `carousel_body` is a short
+statement (`statement_pre`/`statement_script`/`statement_post`, one
+emphasized phrase). Reworking POC's "reword, don't copy" rule for this
+shape wouldn't have made sense — instead, a new instruction asks the model
+to select 3 of the caption's real beats and *compress* each into a punchy
+statement (a compression, not a retelling), reusing
+`_WORD_RANGE_FOR_ROLE["carousel_body"]` (#41/#42's work) for the target,
+not a new number. `headline_word`/`script_word`/`kicker` (cover) and
+`closing_takeaway` are asked for as explicit, separately-named JSON fields
+the model writes deliberately — same pattern `conversation_question`
+already used — not derived by parsing the caption after the fact.
+
+**No `critique_post`/`refine_post` call on this path — the reasoning is in
+the code, not just here, and the small sample size is stated explicitly,
+not implied.** This mirrors what `docs/direct-write-poc.md` Section 5 found
+(direct-write beat eight rounds of patching the checklist-based prompt this
+replaces) and what this session's port test harness (#40's investigation)
+found in real trials: the single-call design held up cleanly against the
+specific failure modes the critique/refine backstops exist to catch
+(closing-declarative drift, reader-address leaking into a body slide). That
+evidence is real but from a handful of trials across a handful of topics —
+nowhere near the volume the checklist writer's own backstops were hardened
+against over #39's many rounds. If real output review at scale finds these
+failure modes returning, adding a narrow critique pass back for this path
+specifically (not the full three-call loop) is the documented next step.
+
+**`validator.py`: confirmed unchanged, not assumed.** Full backend suite
+stayed **132/132 passing** throughout this work, without touching
+`validator.py` at all — direct confirmation, not just the design reasoning
+above (the `QUESTION_REFLECTION` approach choice routing through
+`slide_roles_for()` unmodified) that no changes were needed there.
+
+**Verification, real API calls and real Satori renders throughout:**
+- **Category disambiguation, a fresh collision set (Burnout, not
+  Boundaries):** `career-burnout` and `wellness-burnout` — different
+  categories, same topic name — independently converged on the same anchor
+  ("canary in a coal mine"), a real instance of the already-documented
+  anchor-convergence gap (`FINDINGS.md` #1). Despite the shared anchor, the
+  actual content stayed clearly domain-differentiated: career-burnout's
+  piece is explicitly workplace-framed ("the reliable woman keeps getting
+  more work"), wellness-burnout's is explicitly somatic ("a weekend of
+  sleep does not bring her back"). `relationships-burnout` landed on a
+  genuinely different anchor ("day hospital nursery") with clearly
+  relationship-specific content. Same pattern as the earlier Boundaries
+  finding: category+seed_angles context fixes domain-blindness; it does not
+  fix anchor-level convergence, a distinct, still-open problem.
+- **Anchor avoid-list, a real before/after pair:** `mindset-boundaries` with
+  no avoid-list produced anchor *"Hedy Lamarr's frequency hopping"*; the
+  same topic, re-run with that anchor in a real `MemoryRecord`-backed
+  avoid-list, produced *"Victorian calling cards"* — confirmed different,
+  and confirmed the avoid-list text was actually present in the context
+  handed to the model, not just assumed to have worked because the anchor
+  changed.
+- **knowledge_hints grounding, 3 more citation topics beyond Attachment
+  Styles:** `career-pay-scale`, `wellness-stress-regulation`,
+  `health-hormonal-cycle` — all three stayed properly hedged, no fabricated
+  studies/statistics/dates, real anchors (mad money; the mammalian diving
+  reflex; a basal body temperature chart) matching each topic's
+  `knowledge_hints`.
+- **Word ranges on real output:** 5 of 6 verification posts passed clean;
+  one (`wellness-stress-regulation`) was **correctly flagged** — a body
+  distillation came in at 7 words, genuinely below the template's floor.
+  Reported as the floor doing its job, not a bug — the exact class of
+  problem #41/#42's per-template ranges exist to catch, now confirmed
+  catching a real case from this new writer's own real output, not just a
+  synthetic test fixture.
+- **Real Satori renders, cover/closing/one body slide, not just JSON:** all
+  six cover/closing renders read cleanly — on-brand kickers passing
+  `_KICKER_INSTRUCTION`'s "real sentence, not a label" bar, closing takeaways
+  100% declarative (zero question-drift across 8 real closing lines
+  checked), no overflow, no sparse-looking slides. One body slide rendered
+  confirms the compression instruction is producing real, punchy
+  distillations (*"The bird was not weak. / The air had become
+  dangerous."*), not reworded paragraphs.
+- **Full backend suite: 132/132 passing**, unchanged from before this work
+  started.
+
+**Not yet done, explicitly:** wiring this into `routes/generate.py` (hero
+image sequencing in particular needs real thought, since `visual_subject`
+no longer comes from a separate cheap-tier call the way it does for
+`single_image`); a real decision on whether/how to close the anchor-
+convergence gap found again in the Burnout test; any critique-pass addition,
+per the "small sample size" caveat above. This entry documents the writer
+itself, verified in isolation — not a claim that the full carousel pipeline
+has been replaced end-to-end.
+
+**Not a blueprint deviation in the usual sense** — this is the continuation
+of #39's already-logged, already-experimental carousel-only line of work,
+now at its most structural point yet (a full writer replacement, not a
+prompt patch). Still explicitly open and experimental, same as #39 was
+throughout its eight rounds.
+
+---
+
+## 44. OPEN, EXPERIMENTAL — carousel direct-write port's body slides routed to `carousel_body_teaching` for more room
+
+**Trigger:** a direct follow-up investigation (logged separately) confirmed
+`carousel_body_teaching` was not dead code — the old, still-live carousel
+path (`sample_cell` → `generate_angle` → `generate_post`) reaches it
+whenever `STORY` gets sampled from `CAROUSEL_V1_APPROACHES`, since `STORY`
+is the one member that set also shares with `TEACHING_BODY_APPROACHES`.
+Given the template was already real and reachable, and #43's `carousel_body`
+routing gave the body slots a cramped 10-20 word range, this round moves
+#43's writer onto the roomier template instead.
+
+**What changed, `generator.py`:**
+- `_parse_carousel_direct_response()`'s body slots now build `BodyTeachingSlide`s
+  (`heading`/`body` fields) instead of `BodySlide`s (`statement_pre`/`script`/
+  `post`) — role list changed to `carousel_body_teaching` × 3.
+- New schema fields: `body_N_heading` (a short phrase, a few words) alongside
+  `body_N_text`. Explicitly instructed as **not** a real teaching-style label
+  and **not** a restatement of the body text — just enough to give the slide
+  a lead-in, matching what the template structurally needs without asking the
+  model to actually "teach."
+- The body-slot instruction changed from "compress into a punchy statement"
+  to "retell fresh, same moment/image/idea, different sentence, never
+  verbatim" — the isolated POC's own already-validated slide-instruction
+  pattern (`docs/direct-write-poc.md` Section 11), which fits this template's
+  35-50 word range far better than the "cut to the sharpest line" compression
+  instruction #43 needed for `carousel_body`'s much smaller range.
+- Word target switched to `_WORD_RANGE_FOR_ROLE["carousel_body_teaching"]`
+  (35-50, tolerant 31-55) — still reused directly, no new numbers invented.
+
+**A real dependency this surfaced, fixed in the same pass:** `validator.py`'s
+`_check_format` calls `slide_roles_for(brief)` independently to know which
+range to check each slide against — it does not read what role the writer
+itself actually produced. #43's brief hardcoded `approach=QUESTION_REFLECTION`
+specifically so `slide_roles_for` would resolve to `carousel_body` (matching
+what #43's writer produced then). Simply changing the writer's output to
+`carousel_body_teaching` without also changing this would have silently
+desynced the two — `validate_post` would have checked real 35-50 word
+content against `carousel_body`'s 9-22 word tolerant ceiling, flagging every
+single post as wildly over-length. Fixed by changing the caller's hardcoded
+approach to `Approach.STORY` instead — the sole approach both sets share, so
+`slide_roles_for` now resolves to `carousel_body_teaching` and stays in
+agreement with the writer's actual output, still with zero changes to
+`slide_roles_for`/`validator.py` themselves. Caught before shipping, not
+after — worth calling out explicitly since it's exactly the kind of
+cross-file dependency that's easy to miss when one file (the writer's
+parsing) is edited without tracing who else depends on the same brief field.
+
+**Verified, real API calls, 4 fresh topics (`mindset-perfectionism`,
+`career-imposter-syndrome`, `relationships-people-pleasing`,
+`wellness-rest`) not reused from #43:**
+- **No overflow anywhere** — confirmed across all 4 topics, 12 body slides.
+- **A real, honest finding, not glossed over:** 2 of 4 topics tripped the new
+  31-word tolerant floor — `career-imposter-syndrome` by one word (30 vs
+  31), `wellness-rest` more substantially (29, 26, 28 words across all three
+  of its body slides). Real Satori renders of both a passing example (40
+  words: 3 full sentences, reads as intentional) and a flagged example (26
+  words: 2 shorter sentences) confirm the floor is catching a real visual
+  difference, not a false positive — the flagged render is noticeably
+  thinner, not just numerically short. Not fixed in this round; noted as a
+  real, mild undershoot tendency worth watching in future rounds, the same
+  way rule 1's early-signal instruction needed a hardening pass before it
+  held reliably.
+- **Headings read as intentional, not filler**, across all 12: *"The bright
+  repair," "The polished room," "What holds"* (mindset-perfectionism);
+  *"A voice in the room," "When credit moves," "The careful caveat"*
+  (career-imposter-syndrome); *"The hidden bill," "The polite reflex,"
+  "The quiet exit"* (relationships-people-pleasing); *"Two fingers," "After
+  everything," "The quiet report"* (wellness-rest). Each is a real, specific,
+  evocative mini-title tied to its own beat's image — none read as a generic
+  placeholder or a restatement of the body text beneath it.
+- **Real Satori renders, cover/body/closing**, not just JSON: all read
+  cleanly, no overflow, on-brand kickers, declarative closings echoing each
+  anchor.
+- **Full backend suite: 132/132 passing**, unchanged.
+
+**Not yet done:** the word-floor undershoot tendency found here is real and
+unaddressed — a candidate next step if this line of work continues, same
+"documented, not a surprise" framing as #43's own critique/refine caveat.
+
+**Addendum — narrative-fidelity check, closing the loop on whether the
+retelling actually holds up, not just the word count (same session):** a
+direct concern with this whole line of work is whether pulling 3 of the
+caption's beats out into their own slides reproduces the isolated POC's
+first failed "reshape" attempt (`docs/direct-write-poc.md` Section 11) —
+where 1 of 3 trials collapsed into copying the caption verbatim rather than
+genuinely retelling it. Checked directly: **5 fresh real topics**
+(`mindset-self-doubt`, `career-office-politics`, `wellness-sleep`,
+`relationships-invisible-labor`, `society-quirky-fun`), each caption split
+into its real beats and matched by hand against its 3 body slides.
+
+Result: **no full-sentence verbatim reuse in any of the 15 slides checked**
+— a categorically better result than the POC's first attempt, which had
+verbatim copying in 1 of 3. Every slide retained its source beat's concrete
+image and point (e.g. `mindset-self-doubt`'s ducking-stool scene survives
+intact into "The public chair," reworded, not copied; `society-quirky-fun`'s
+closing slide invents a fresh pun — "dress itself up" — tied to the anchor
+that never appeared in the caption at all). One minor near-verbatim
+instance flagged, not glossed over: `wellness-sleep`'s third slide's "the
+hour gets slower" sits close to the caption's own "a slower hour" — a
+three-word overlap, not a sentence-level copy, but worth naming.
+
+The compression shape was also consistent trial to trial, not
+topic-dependent: every one of the 5 trials implicitly followed the same
+3-act structure — slide 1 draws on the anchor's own opening scene (beats
+1-2), slide 2 draws on the modern-life translation (beats 3-5), slide 3
+draws on the closing turn (beats 6-7) — usually compressing 2 adjacent
+caption beats into one slide rather than a strict 1-beat-per-slide mapping.
+This narrative-fidelity question is now closed for this round of testing;
+it does not need to be re-litigated blind next time this path is picked up.
+
+**Not a blueprint deviation** — continuation of #39/#43's already-logged,
+already-experimental carousel-only line of work.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |

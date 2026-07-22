@@ -184,3 +184,40 @@ def generate_angle(
         visual_subject=visual_subject,
         fingerprint=_fingerprint(topic.id, sub_concept, approach),
     )
+
+
+@dataclass
+class CarouselContext:
+    """Context for the carousel direct-write port (docs/logbook.md #43) to pick
+    its own anchor from, rather than being handed one dictated sub-concept/
+    approach/entry-point cell. Every field here is context to inform the
+    model's choice, never a requirement it must satisfy."""
+
+    category: str
+    seed_angles: list[str]
+    # Empty unless topic.requires_citation -- knowledge_hints exists specifically
+    # to ground citation-required topics (logbook #14); handing it to a
+    # non-citation topic would be dead weight the prompt never needs.
+    knowledge_hints: list[str]
+    # This topic's own previously-used anchors, most recent first as stored --
+    # a caller-facing avoid-list, the same purpose recent_anchors already
+    # serves in the isolated POC (app/poc/FINDINGS.md #1), now sourced from
+    # real persisted memory instead of a hand-fed test-harness list.
+    recent_anchors: list[str]
+
+
+def assemble_carousel_context(topic: Topic, memory: list[MemoryRecord]) -> CarouselContext:
+    """Carousel-only, pure Python, no LLM call -- replaces sample_cell() and
+    generate_angle() for the direct-write port. Pulls topic.primary_category,
+    every one of topic.seed_angles (not one sampled sub-concept),
+    topic.knowledge_hints when citation-required, and this topic's own
+    recorded anchors from memory. Deliberately reads nothing about approach or
+    entry_point -- those concepts don't exist on this path at all; they stay
+    used only by sample_cell/generate_angle, single_image's unchanged path."""
+    recent_anchors = [r.anchor for r in memory if r.topic_id == topic.id and r.anchor]
+    return CarouselContext(
+        category=topic.primary_category,
+        seed_angles=list(topic.seed_angles),
+        knowledge_hints=list(topic.knowledge_hints) if topic.requires_citation else [],
+        recent_anchors=recent_anchors,
+    )
