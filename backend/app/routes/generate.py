@@ -12,7 +12,9 @@ through the client instead of a database.
 `/generate/from-brief` exists for briefs that don't come from the taxonomy at all —
 paste-a-link (Section 10) builds a `ContentBrief` whose `topic_id` isn't a real Topic,
 so it can't flow through `/generate`'s topic lookup; it runs the exact same generation
-lane against whatever brief it's handed instead."""
+lane against whatever brief it's handed instead. As of logbook #51, that lane also
+respects `CAROUSEL_WRITER` for a carousel brief, the same escape-hatch pattern
+`run_generate` already uses — see `run_generate_from_brief` below."""
 
 from __future__ import annotations
 
@@ -34,7 +36,13 @@ from app.engine.angle_engine import (
     generate_angle,
 )
 from app.engine.brief_builder import _hero_image_prompt, build_brief
-from app.engine.generator import draft_carousel_direct, generate_post, regenerate_slide, slide_text
+from app.engine.generator import (
+    draft_carousel_direct,
+    draft_carousel_direct_from_source,
+    generate_post,
+    regenerate_slide,
+    slide_text,
+)
 from app.engine.memory import MemoryStore
 from app.engine.validator import validate_post
 from app.models.brand_kit import BrandKit, MoodPalette
@@ -323,6 +331,131 @@ async def _generate_carousel_direct(
     )
 
 
+async def _generate_paste_link_direct(
+    brief: ContentBrief,
+    *,
+    brand_kit: BrandKit,
+    memory: list[MemoryRecord],
+    llm: LLMProvider,
+    image: ImageProvider,
+    settings: Settings,
+    store: MemoryStore,
+    category: str,
+    masthead: str,
+) -> GenerateResponse:
+    """Paste-link's own direct-write path (logbook #51) -- the
+    generate_from_brief analog of _generate_carousel_direct above, for a
+    brief with a real pinned article (brief.sources) instead of a taxonomy
+    Topic. No Topic exists for this brief at all (its topic_id is a
+    synthetic per-article hash), so this calls
+    draft_carousel_direct_from_source (no topic/context parameters) rather
+    than reusing draft_carousel_direct with dummy values.
+
+    brief.approach is force-set to Approach.STORY here, overriding
+    build_paste_link_brief's own default (Approach.STAT_RESEARCH) --
+    direct-write itself never reads brief.approach (it has no
+    approach/entry_point concept at all), but validator.py's
+    slide_roles_for(brief) call inside _finalize_generation's
+    validate_post() does, independently, to decide the per-slide word-range
+    check. STAT_RESEARCH is not in TEACHING_BODY_APPROACHES
+    (taxonomy/approaches.py), so left uncorrected, slide_roles_for would
+    compute "carousel_body" (10-20 word range) for all three body slides
+    while the actual slides are carousel_body_teaching (35-50 words) --
+    guaranteed word-ceiling validation failures on every real call. STORY
+    is used, not just any TEACHING_BODY_APPROACHES member, because it's
+    also the one value already used for this exact reason on the taxonomy
+    direct-write path (logbook #44) and the sole approach shared with
+    CAROUSEL_V1_APPROACHES, so both direct-write callers now agree with
+    validator.py the same way. Same tradeoff as _generate_carousel_direct:
+    sequential, not parallel, hero image generation -- mood/visual_subject
+    aren't known until the writer call returns."""
+    post, anchor, mood, visual_subject = await asyncio.to_thread(
+        draft_carousel_direct_from_source, brief, brand_kit, llm
+    )
+    hero_image_prompt = _hero_image_prompt(visual_subject, mood)
+    updated_brief = brief.model_copy(
+        update={
+            "angle": anchor,
+            "mood": mood,
+            "hero_image_prompt": hero_image_prompt,
+            "approach": Approach.STORY,
+        }
+    )
+
+    hero_bytes = await asyncio.to_thread(_generate_hero, updated_brief, brand_kit, image, settings)
+    # topic_id:anchor (logbook #43's fingerprint pattern) -- paste-link's
+    # topic_id is already a one-off per-article hash, so this fingerprint is
+    # essentially always unique regardless; kept consistent with the
+    # taxonomy direct-write path rather than inventing a different shape.
+    fingerprint = f"{updated_brief.topic_id}:{anchor}"
+
+    return _finalize_generation(
+        updated_brief,
+        post,
+        hero_bytes,
+        brand_kit=brand_kit,
+        store=store,
+        memory=memory,
+        fingerprint=fingerprint,
+        category=category,
+        masthead=masthead,
+        anchor=anchor,
+    )
+
+
+async def run_generate_from_brief(
+    brief: ContentBrief,
+    *,
+    masthead: str,
+    category: str,
+    brand_kit: BrandKit,
+    llm: LLMProvider,
+    image: ImageProvider,
+    settings: Settings,
+    store: MemoryStore,
+) -> GenerateResponse:
+    """Paste-a-link's own entry point (routes/sources.py builds a synthetic,
+    non-taxonomy brief; /generate/from-brief below hands it here) --
+    mirrors run_generate's CAROUSEL_WRITER branch (logbook #46) for a brief
+    that has no Topic behind it at all (logbook #51). Deliberately NOT
+    implemented by adding this check inside the shared _generate_for_brief
+    above: that function is also called by run_generate's own legacy
+    fallback (a preselected angle, or CAROUSEL_WRITER=legacy) for taxonomy
+    briefs, and a preselected angle must always use legacy regardless of
+    CAROUSEL_WRITER (logbook #46's deliberate scope boundary, re-confirmed
+    live in logbook #50) -- checking the flag inside _generate_for_brief
+    itself would have silently broken that boundary for every run_generate
+    caller, not just added support here. Branching in this
+    paste-link-specific function instead keeps that boundary untouched."""
+    memory = store.load()
+    if brief.format == Format.CAROUSEL and settings.carousel_writer == "direct_write":
+        return await _generate_paste_link_direct(
+            brief,
+            brand_kit=brand_kit,
+            memory=memory,
+            llm=llm,
+            image=image,
+            settings=settings,
+            store=store,
+            category=category,
+            masthead=masthead,
+        )
+
+    fingerprint = f"{brief.topic_id}:{brief.angle}:{brief.approach.value}"
+    return await _generate_for_brief(
+        brief,
+        brand_kit=brand_kit,
+        llm=llm,
+        image=image,
+        settings=settings,
+        store=store,
+        memory=memory,
+        fingerprint=fingerprint,
+        category=category,
+        masthead=masthead,
+    )
+
+
 async def run_generate(
     *,
     topic_id: str,
@@ -476,20 +609,15 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
 
 @router.post("/generate/from-brief", response_model=GenerateResponse)
 async def generate_from_brief(request: GenerateFromBriefRequest) -> GenerateResponse:
-    store = MemoryStore()
-    brief = request.brief
-    fingerprint = f"{brief.topic_id}:{brief.angle}:{brief.approach.value}"
-    return await _generate_for_brief(
-        brief,
+    return await run_generate_from_brief(
+        request.brief,
+        masthead=request.masthead,
+        category=request.category,
         brand_kit=get_brand_kit(),
         llm=LLMProvider(),
         image=ImageProvider(),
         settings=get_settings(),
-        store=store,
-        memory=store.load(),
-        fingerprint=fingerprint,
-        category=request.category,
-        masthead=request.masthead,
+        store=MemoryStore(),
     )
 
 

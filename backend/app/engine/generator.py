@@ -958,7 +958,7 @@ _CAROUSEL_DIRECT_BANNED_PHRASES = (
 # connecting the caption-level instruction to the two explicit fields
 # (closing_takeaway, the three body slides' heading + retold beat) this production shape
 # asks for that the POC's own JSON never had.
-_CAROUSEL_DIRECT_RULES = """1. Open inside a specific, concrete scene — a person doing a small, particular
+_CAROUSEL_DIRECT_RULE_1 = """1. Open inside a specific, concrete scene — a person doing a small, particular
 thing. Withhold the meaning of the detail for a beat. Never open with a
 definition. (Naming the anchor immediately, in the first sentence, is also
 valid when the anchor is striking enough on its own.) By the caption's second
@@ -968,9 +968,9 @@ enough; you do not need to explain the connection yet, only signal that one is
 coming. Before finalizing, check: does the caption's first or second beat
 contain that signal? If the caption stays entirely inside the anchor's own
 history, mechanics, or terminology through its third beat with no such signal
-anywhere yet, add one now rather than waiting for later.
+anywhere yet, add one now rather than waiting for later."""
 
-2. Before settling on your anchor, think of 3 real candidates — genuine
+_CAROUSEL_DIRECT_TAXONOMY_ANCHOR_RULE = """2. Before settling on your anchor, think of 3 real candidates — genuine
 historical practices, words, traditions, or scientific observations you are
 highly confident actually exist and are documented, not paraphrases or
 composites of things you've encountered. For each candidate, ask yourself
@@ -981,9 +981,27 @@ candidate that appears in this topic's recently-used anchors below. Choose the
 strongest of what remains. If none of your 3 candidates are ones you're
 genuinely confident about, generate 3 more rather than proceeding with a
 shaky one. The topic word itself should almost never be the anchor — the
-anchor is something else entirely that the topic's meaning emerges through.
+anchor is something else entirely that the topic's meaning emerges through."""
 
-3. Stay with this one anchor for the entire piece. Never introduce a second,
+# Paste-link's brief has a real pinned article (brief.sources), not a topic to
+# freely recall an anchor from -- rule 2 here replaces free historical/cultural
+# recall with "find the real anchor already inside the article excerpt," the
+# core content-grounding adaptation logbook #51 makes for this brief shape.
+# Rules 1 and 3-12 (shared below via _CAROUSEL_DIRECT_RULE_1 /
+# _CAROUSEL_DIRECT_RULES_3_TO_12) are about voice and craft, not anchor
+# origin, so they transfer unchanged -- only where the anchor comes from
+# needs to differ.
+_CAROUSEL_DIRECT_PASTE_LINK_ANCHOR_RULE = """2. Your anchor is not something you recall or invent — it is a specific
+fact, scene, moment, or detail already stated in the pinned article excerpt
+below. Read the excerpt first and find the one detail in it with the most
+narrative weight: the most concrete, most specific, most human thing the
+article actually says. Do not reach outside the excerpt for a supporting
+historical parallel, statistic, or comparison, even a true one — if it is
+not in the excerpt, it does not belong in this piece. If the excerpt is thin
+on concrete detail, use its most specific stated fact as the anchor rather
+than inventing texture to compensate."""
+
+_CAROUSEL_DIRECT_RULES_3_TO_12 = """3. Stay with this one anchor for the entire piece. Never introduce a second,
 unrelated anchor partway through — deepen the one you opened with instead.
 
 4. If you cite a real person, study, or source, delay and soften the
@@ -1049,6 +1067,16 @@ only for a light breath inside one continuous thought, never to splice two
 complete sentences together. Use an em dash for a beat that turns,
 interrupts, or lands a reveal. Break a sentence into two rather than
 stacking three or more clauses behind commas."""
+
+_CAROUSEL_DIRECT_RULES = (
+    f"{_CAROUSEL_DIRECT_RULE_1}\n\n{_CAROUSEL_DIRECT_TAXONOMY_ANCHOR_RULE}\n\n"
+    f"{_CAROUSEL_DIRECT_RULES_3_TO_12}"
+)
+# Paste-link variant (logbook #51) -- identical craft rules, anchor rule swapped.
+_CAROUSEL_DIRECT_PASTE_LINK_RULES = (
+    f"{_CAROUSEL_DIRECT_RULE_1}\n\n{_CAROUSEL_DIRECT_PASTE_LINK_ANCHOR_RULE}\n\n"
+    f"{_CAROUSEL_DIRECT_RULES_3_TO_12}"
+)
 
 _CAROUSEL_DIRECT_EXAMPLES = """Four examples of the finished style — study the underlying principles, not
 which specific opening move or how many turns each one uses; both an
@@ -1365,6 +1393,130 @@ def draft_carousel_direct(
     narrow critique pass back for this path specifically (not the full
     three-call loop) is the documented next step, not a surprise."""
     system = _carousel_direct_system_prompt(brief, brand_kit, topic, context)
+    prompt = "Write the piece now. Output only the JSON object described above, nothing else."
+    raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=2000)
+    return _parse_carousel_direct_response(raw, brand_kit)
+
+
+def _carousel_direct_paste_link_system_prompt(brief: ContentBrief, brand_kit: BrandKit) -> str:
+    """Paste-link variant of _carousel_direct_system_prompt (logbook #51).
+    Same JSON shape and the same voice/craft rules, but built for a brief
+    with a real pinned article (routes/sources.py::build_paste_link_brief),
+    not a taxonomy Topic -- there is no Topic/CarouselContext for this brief
+    at all (its topic_id is a synthetic per-article hash, never a real
+    taxonomy entry), so this function never calls
+    assemble_carousel_context() or takes a topic/context parameter, rather
+    than passing dummy values through a signature built for something else.
+
+    The anchor-selection rule is the one real content-level swap
+    (_CAROUSEL_DIRECT_PASTE_LINK_RULES' rule 2, above): free historical/
+    cultural recall doesn't fit a piece that has to stay inside what a real,
+    specific article actually says, so rule 2 here points the model at the
+    pinned excerpt instead. The citation grounding itself is NOT rebuilt --
+    _citation_instruction_block's "sources" branch (confirmed correct for
+    this exact brief shape in logbook #12) already embeds the full pinned
+    excerpt(s) into the prompt verbatim, so it's reused as-is, same call as
+    the taxonomy path uses for its own citation_block."""
+    voice_lines = "\n".join(f"- {s}" for s in brand_kit.voice_samples.poetic)
+    forbidden = ", ".join(brand_kit.forbidden) or "none"
+    banned_phrases = ", ".join(f'"{p}"' for p in _CAROUSEL_DIRECT_BANNED_PHRASES)
+    citation_block = _citation_instruction_block(brief)
+
+    closing_lo, closing_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_closing"])
+    conv_lo, conv_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_conversation"])
+
+    return (
+        f"You are the writer for {brand_kit.brand_name} — for {brand_kit.audience} "
+        f"Niche: {brand_kit.niche}\n\n"
+        "This piece reports on a real pinned article, not a freely-chosen topic — "
+        "every factual claim must come from the article excerpt in the citation "
+        "section below, never general knowledge, even when it feels safely true.\n\n"
+        "The content itself — not just the tone — should draw on why this topic "
+        "specifically lands differently for a woman, when the article's own "
+        "content genuinely supports that: the particular pressure, socialization "
+        "pattern, or double standard at play. Never invent a gendered angle the "
+        "article doesn't itself give you material for — a straightforwardly "
+        "reported piece is preferable to a stretched one.\n\n"
+        f"Never sound: {forbidden}.\n\n"
+        f"Never write any of these exact phrases or close paraphrases of them — "
+        f"they are Instagram wallpaper text, the opposite of this brand's voice: "
+        f"{banned_phrases}.\n\n"
+        f"Reference voice — match this register, don't copy it:\n{voice_lines}\n\n"
+        f"{_CAROUSEL_DIRECT_PASTE_LINK_RULES}\n\n"
+        f"{_CAROUSEL_DIRECT_EXAMPLES}\n\n"
+        "The anchor field must contain only the specific real detail from the "
+        "article this piece is built around, a few words, no reasoning or "
+        "alternatives — do your comparison silently, output only the result.\n\n"
+        f"{_carousel_direct_mood_instruction()}\n\n"
+        f"{_carousel_direct_visual_subject_instruction()}\n\n"
+        "Write the caption before anything else. The caption is the real piece — "
+        "write it exactly as you would if slides didn't exist, one continuous "
+        "flowing telling, start to finish, with the beat structure rule 9 "
+        "describes built into its own sentences.\n\n"
+        f"{_carousel_direct_body_distillation_instruction()}\n\n"
+        f"{_carousel_direct_cover_instruction()}\n\n"
+        f"closing_takeaway: one declarative line, {closing_lo}-{closing_hi} words — "
+        "see rule 7.\n\n"
+        f"conversation_question: one genuine, open, unresolved question tied "
+        f"directly to this anchor, {conv_lo}-{conv_hi} words, for the reader to "
+        "sit with.\n\n"
+        f"{citation_block}\n"
+        "Also write 5-10 hashtags.\n\n"
+        "Output as JSON:\n"
+        "{\n"
+        '  "anchor": "<the specific real detail from the article this piece is '
+        'built around, in a few words>",\n'
+        '  "mood": "wisdom | bold | celebratory",\n'
+        '  "visual_subject": "<5-15 words, one concrete photographable image tied '
+        'to the anchor>",\n'
+        '  "caption": "<the full piece, written first, start to finish, in '
+        'flowing prose>",\n'
+        '  "headline_word": "...", "script_word": "...", "kicker": "...",\n'
+        '  "body_1_heading": "...", "body_1_text": "...",\n'
+        '  "body_2_heading": "...", "body_2_text": "...",\n'
+        '  "body_3_heading": "...", "body_3_text": "...",\n'
+        f'  "closing_takeaway": "<{closing_lo}-{closing_hi} words>",\n'
+        '  "conversation_question": "...",\n'
+        '  "hashtags": ["...", ...]\n'
+        "}\n"
+    )
+
+
+def draft_carousel_direct_from_source(
+    brief: ContentBrief,
+    brand_kit: BrandKit,
+    llm: LLMProvider,
+) -> tuple[GeneratedPost, str, str, str]:
+    """Paste-link's own direct-write entry point (logbook #51) -- same
+    single-call, no critique/refine design as draft_carousel_direct, for a
+    brief built from a real pinned article
+    (routes/sources.py::build_paste_link_brief) rather than a taxonomy
+    Topic. Deliberately has no topic/context parameters and never calls
+    assemble_carousel_context() -- there is no Topic behind a paste-link
+    brief to look one up from (its topic_id is a synthetic per-article
+    hash, e.g. "paste-link:a1b2c3..."), so the function signature reflects
+    that rather than accepting dummy values for a Topic that doesn't exist.
+
+    The anchor avoid-list/non-repetition mechanism
+    (angle_engine.CarouselContext.recent_anchors) is deliberately not
+    ported over here either -- investigated, not assumed to transfer.
+    `recent_anchors` is built by matching MemoryRecord.topic_id against a
+    Topic's real, recurring id (angle_engine.assemble_carousel_context);
+    paste-link's topic_id is a one-off hash unique to each pasted article
+    (hashlib.sha256 of the url-or-title), so the only way it would ever
+    find a match is pasting the exact same URL or title twice -- the
+    mechanism would be mechanically correct if wired in, but functionally
+    almost always a no-op for this brief shape, unlike a real taxonomy
+    topic that recurs across many posts over time. Not meaningfully
+    applicable here, so it's left out rather than forced in for
+    superficial parity with draft_carousel_direct.
+
+    Returns (post, anchor, mood, visual_subject), the same shape
+    draft_carousel_direct returns -- see that function's docstring for what
+    each element means and how a caller should use them (correcting
+    brief.angle/mood, wrapping visual_subject via
+    brief_builder._hero_image_prompt())."""
+    system = _carousel_direct_paste_link_system_prompt(brief, brand_kit)
     prompt = "Write the piece now. Output only the JSON object described above, nothing else."
     raw = llm.complete(tier="strong", system=system, prompt=prompt, max_tokens=2000)
     return _parse_carousel_direct_response(raw, brand_kit)

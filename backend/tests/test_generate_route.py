@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import re
+from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
@@ -11,8 +12,10 @@ import app.providers.duotone as duotone_module
 from app.config import Settings
 from app.engine.angle_engine import sample_cell
 from app.engine.memory import MemoryStore
-from app.models.enums import Format
-from app.routes.generate import run_generate
+from app.models.brief import Source
+from app.models.enums import Approach, Format
+from app.routes.generate import run_generate, run_generate_from_brief
+from app.sources.paste_link import build_paste_link_brief
 from app.taxonomy.loader import get_topics_by_id
 from app.taxonomy.voice_register import APPROACH_REGISTER
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
@@ -360,3 +363,89 @@ def test_run_generate_unknown_topic_raises_key_error(tmp_path):
                 settings=_settings(),
             )
         )
+
+
+def _fake_paste_link_brief_result(format: Format = Format.CAROUSEL):
+    """Real build_paste_link_brief() output (logbook #51), not a hand-rolled
+    ContentBrief -- gives paste-link's own real field shape (synthetic
+    topic_id hash, sources populated, requires_citation=True,
+    approach=STAT_RESEARCH default) rather than an approximation."""
+    source = Source(
+        title="A Real Article About Something Specific",
+        author="A Reporter",
+        url="https://example.com/a-real-article",
+        excerpt="The article states a specific, concrete fact about its subject.",
+        retrieved_at=datetime.now(timezone.utc),
+    )
+    visual_subject_llm = _QueueLLM([json.dumps({"visual_subject": "a stack of printed reports on a desk"})])
+    return build_paste_link_brief(source, WGS_BRAND_KIT, [], visual_subject_llm, format=format)
+
+
+def test_run_generate_from_brief_paste_link_direct_write(tmp_path):
+    """Paste-link's own entry point (/generate/from-brief) now respects
+    CAROUSEL_WRITER too (logbook #51) -- a carousel brief with
+    carousel_writer=direct_write routes to draft_carousel_direct_from_source,
+    not legacy generate_post. Confirmed by a single-call LLM queue shaped for
+    the direct-write JSON schema -- legacy would need a second response and
+    fail with an empty queue if wrongly reached. Also confirms the
+    approach-override fix (STAT_RESEARCH -> STORY) actually prevents the
+    word-range validation mismatch it exists to catch: validation_errors is
+    asserted empty, not just ignored."""
+    store = MemoryStore(path=tmp_path / "memory.json")
+    brief_result = _fake_paste_link_brief_result(Format.CAROUSEL)
+    llm = _QueueLLM([_direct_write_response_json("a real article-grounded anchor")])
+    image = _FakeImage()
+
+    result = asyncio.run(
+        run_generate_from_brief(
+            brief_result.brief,
+            masthead=brief_result.masthead,
+            category="Society",
+            brand_kit=WGS_BRAND_KIT,
+            llm=llm,
+            image=image,
+            settings=_settings(),  # carousel_writer defaults to direct_write
+            store=store,
+        )
+    )
+
+    assert result.post.slides[0].template_id == "carousel_cover"
+    assert result.post.slides[1].template_id == "carousel_body_teaching"
+    assert result.post.slides[-1].template_id == "carousel_conversation"
+    assert result.brief.angle == "a real article-grounded anchor"
+    assert result.brief.approach == Approach.STORY
+    assert result.hero_image_base64 is not None
+    assert result.validation_errors == []
+
+    records = store.load()
+    assert len(records) == 1
+    assert records[0].anchor == "a real article-grounded anchor"
+
+
+def test_run_generate_from_brief_paste_link_legacy_override_still_works(tmp_path):
+    """CAROUSEL_WRITER=legacy is still the escape hatch for paste-link too --
+    confirms the new branch in run_generate_from_brief doesn't just always
+    take the direct-write path. Also confirms brief.approach is genuinely
+    untouched on this path (still STAT_RESEARCH, the paste-link default),
+    unlike the direct-write path above which force-sets it to STORY."""
+    store = MemoryStore(path=tmp_path / "memory.json")
+    brief_result = _fake_paste_link_brief_result(Format.CAROUSEL)
+    llm = _AdaptiveCarouselLLM([])  # legacy paste-link never samples an angle
+    image = _FakeImage()
+
+    result = asyncio.run(
+        run_generate_from_brief(
+            brief_result.brief,
+            masthead=brief_result.masthead,
+            category="Society",
+            brand_kit=WGS_BRAND_KIT,
+            llm=llm,
+            image=image,
+            settings=_settings(carousel_writer="legacy"),
+            store=store,
+        )
+    )
+
+    assert result.brief.approach == Approach.STAT_RESEARCH
+    records = store.load()
+    assert records[0].anchor == ""  # legacy has no anchor concept

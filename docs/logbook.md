@@ -3386,6 +3386,161 @@ already documented as deliberate ("direct-write has nothing to preview
 first") by giving carousel its own no-preview UI path, rather than
 changing what that boundary means.
 
+---
+
+## 51. Paste-link ported to direct-write — its own writer variant, not a reuse of the taxonomy prompt as-is
+
+**Symptom:** none in production — `_generate_for_brief()` (the function
+`/generate/from-brief`, paste-link's own entry point, always called)
+ignored `CAROUSEL_WRITER` entirely and always ran the legacy
+`draft_post`/`critique_post`/`refine_post` chain, even after direct-write
+became the taxonomy default (logbook #46). Requested explicitly as a real
+feature port, not a bug fix — but treated with the same rigor, since
+naively wiring the flag through would have shipped a content-grounding
+regression (below).
+
+**Why this isn't just plumbing — the anchor-selection rule doesn't fit a
+real article:** the taxonomy direct-write prompt's rule 2 tells the model
+to freely recall 3 candidate historical/cultural anchors from its own
+knowledge and pick the strongest. Paste-link's brief has a real, specific,
+pinned article (`brief.sources`) — free recall is exactly the wrong
+instruction here; it would let the model wander into invented parallels
+untethered to what the article actually says. Fixed by writing a real
+paste-link-specific rule 2 (`_CAROUSEL_DIRECT_PASTE_LINK_ANCHOR_RULE`,
+`engine/generator.py`): the anchor must be a specific fact, scene, moment,
+or detail already stated in the pinned excerpt, not recalled or invented,
+with an explicit instruction not to reach outside the excerpt for a
+supporting parallel or statistic even a true one. Rules 1 and 3-12 (voice,
+craft, punctuation) are about how to write, not where the anchor comes
+from, so they transfer unchanged — refactored the existing
+`_CAROUSEL_DIRECT_RULES` into `_CAROUSEL_DIRECT_RULE_1` +
+`_CAROUSEL_DIRECT_TAXONOMY_ANCHOR_RULE` +
+`_CAROUSEL_DIRECT_RULES_3_TO_12` so both variants compose from the same
+shared 11-rule text rather than duplicating it (verified the composed
+`_CAROUSEL_DIRECT_RULES` still produces 12 rules in order after the
+split, before writing the new variant). Also softened the gendered-angle
+instruction from the taxonomy prompt's hard requirement ("not acceptable"
+to skip it) to conditional ("when the article's own content genuinely
+supports one") — a hard requirement here would incentivize stretching a
+real article's actual content to manufacture a gendered angle it doesn't
+have, in direct tension with the whole point of this port.
+
+**Citation grounding itself was NOT rebuilt** — `_citation_instruction_block`'s
+`"sources"` branch (confirmed correct for this exact brief shape in
+logbook #12) already embeds the full pinned excerpt into the prompt;
+`_carousel_direct_paste_link_system_prompt` calls it exactly the way the
+taxonomy path calls it for its own `citation_block`, no changes.
+
+**Anchor avoid-list investigated, not assumed to transfer — found not
+meaningfully applicable, left out:** `CarouselContext.recent_anchors`
+(the taxonomy path's non-repetition mechanism) is built by matching
+`MemoryRecord.topic_id` against a real, recurring `Topic.id`. Paste-link's
+`topic_id` is `f"paste-link:{sha256(url or title)[:12]}"` — a one-off
+hash unique to each pasted article. The only way it could ever find a
+match is pasting the exact same URL or title twice. Beyond that, there's
+no `Topic` object behind a paste-link brief at all, so
+`assemble_carousel_context()` (which takes a `Topic`) can't even be
+called — this isn't just "less useful here," it's structurally
+inapplicable. `draft_carousel_direct_from_source()` therefore has no
+topic/context parameters at all, rather than accepting dummy values for a
+Topic that doesn't exist.
+
+**A real, non-obvious bug caught by tracing validator.py, not assumed
+away:** `build_paste_link_brief()` defaults `brief.approach` to
+`Approach.STAT_RESEARCH` (used by the legacy path to pick a voice
+register). Direct-write itself never reads `brief.approach` — but
+`_finalize_generation`'s call to `validate_post()` independently calls
+`slide_roles_for(brief)`, which uses `brief.approach` to decide
+`carousel_body` (10-20 words) vs. `carousel_body_teaching` (35-50 words)
+for the body slides. `STAT_RESEARCH` is not in `TEACHING_BODY_APPROACHES`
+(`taxonomy/approaches.py`), so left uncorrected, `slide_roles_for` would
+compute `carousel_body`'s narrow range while the actual slides are
+`carousel_body_teaching`-shaped — guaranteed word-ceiling validation
+failures on every real call, the same mismatch class logbook #44 already
+found and fixed once for the taxonomy path. Fixed the same way: force
+`brief.approach = Approach.STORY` in `_generate_paste_link_direct`
+(`routes/generate.py`) when building the updated brief after the writer
+call returns — `STORY` specifically because it's the one approach shared
+by `CAROUSEL_V1_APPROACHES` and `TEACHING_BODY_APPROACHES`, the same
+reason logbook #44 picked it. **Verified this was a real bug, not a
+theoretical one**: ran the new test with the override temporarily removed
+— it failed with exactly the predicted error (`slide 2/3/4 (carousel_body)
+has 34 words, exceeds the 22-word ceiling`), then confirmed the fix
+resolves it (`validation_errors == []`) before restoring it permanently.
+
+**Deliberately NOT implemented by adding the `CAROUSEL_WRITER` check
+inside the shared `_generate_for_brief`** — that function is also called
+by `run_generate`'s own legacy fallback for taxonomy briefs (a preselected
+angle, or `CAROUSEL_WRITER=legacy`), and a preselected angle must always
+use legacy regardless of the flag (logbook #46's deliberate scope
+boundary, re-confirmed live in logbook #50). Checking the flag inside
+`_generate_for_brief` itself would have silently broken that boundary for
+every `run_generate` caller, not just added support for paste-link.
+Instead, added a new `run_generate_from_brief()` wrapper that branches on
+`CAROUSEL_WRITER` before ever reaching `_generate_for_brief`, and pointed
+`/generate/from-brief`'s route handler at it — `_generate_for_brief`
+itself is completely unchanged.
+
+**Fix, concretely:**
+- `engine/generator.py`: split `_CAROUSEL_DIRECT_RULES` as described above;
+  added `_CAROUSEL_DIRECT_PASTE_LINK_RULES`,
+  `_carousel_direct_paste_link_system_prompt()`, and
+  `draft_carousel_direct_from_source()`.
+- `routes/generate.py`: added `_generate_paste_link_direct()` (the
+  `generate_from_brief` analog of `_generate_carousel_direct`) and
+  `run_generate_from_brief()` (the new branch point); `generate_from_brief`
+  now calls `run_generate_from_brief` instead of `_generate_for_brief`
+  directly.
+
+**Verified with a real trial, not code review alone:** pasted a real,
+live URL (`https://en.wikipedia.org/wiki/Impostor_syndrome`) through the
+real local backend, `CAROUSEL_WRITER=direct_write` (the real default).
+`POST /sources/paste-link` → real `POST /generate/from-brief` → real HTTP
+200, a real generated post and a real hero image. Fact-checked every
+specific claim in the output against the actual fetched excerpt line by
+line: the "wrote down positive feedback, then had to recall why they
+received it and what made them see it in a negative light" detail (body
+slide 1) traces to the excerpt's Clance & Imes 1978 psychosocial-
+intervention paragraph verbatim in substance; "first conceptualised...
+high-achieving women... later research... equally distributed among the
+genders... societal pressures, gender biases, traditional expectations"
+(body slide 3 + caption) traces directly to the excerpt's "Gender
+differences" section; "women may experience higher societal pressure...
+male-dominated fields... gender-based discrimination or harassment...
+depression and anxiety" (caption) traces directly to the same section's
+next paragraph. No claim in the output was found unsupported by the
+excerpt — zero fabrication beyond the article, the core requirement this
+port exists to satisfy. Citation check passed cleanly (`_check_citation`
+found no error — `requires_citation=True` and `_citation_mode(brief) ==
+"sources"`, not `"none"`). Two unrelated, real validation flags did
+surface and are reported rather than hidden: a forbidden-phrase hit on
+the literal word "negative" (a pre-existing, aggressive `brand_kit`
+entry that would fire for any writer, legacy or direct-write, unrelated
+to this port) and one body slide 2 words under the 31-word floor (the
+same mild-undershoot tendency already tracked as open in logbook #43-46's
+deviations-table entry, now reconfirmed on this second writer variant).
+Hero image: real GPT Image 2 + duotone render, genuinely on-brand
+(abstract, editorial, a handwritten journal page with checklist marks)
+and specifically tied to the chosen anchor ("positive feedback written
+down"), not a generic or mismatched image.
+
+Added two new tests (`tests/test_generate_route.py`):
+`test_run_generate_from_brief_paste_link_direct_write` (confirms the
+direct-write branch fires, `brief.approach` becomes `STORY`, and
+`validation_errors == []`) and
+`test_run_generate_from_brief_paste_link_legacy_override_still_works`
+(confirms `CAROUSEL_WRITER=legacy` still works for paste-link and leaves
+`brief.approach` at its real `STAT_RESEARCH` default, untouched). Full
+backend suite: 137/137.
+
+**Not a blueprint deviation** — implements `CAROUSEL_WRITER` consistently
+across both of direct-write's real entry points, rather than changing
+what the flag means.
+
+---
+
+## Summary — deviations from the original design docs
+
 | # | Deviation | Why |
 |---|---|---|
 | 3 | Sixth slide template, `CarouselBodyTeaching`, added alongside the five locked in Phase 1 | The original `CarouselBody` single-fragment shape structurally couldn't hold real teaching content for `story`/`educational`/`framework`/`myth_vs_fact`/`common_mistakes` approaches — content kept leaking into the caption instead |
@@ -3399,4 +3554,4 @@ changing what that boundary means.
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
 | 39 | **OPEN/EXPERIMENTAL, 8 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues; round 7 added a real `carousel_conversation` slide (first structural, not prompt-only, change) and fixed a render-time emoji glyph gap; round 8 raised body slides 1–2 → 3 (6 slides total now, fixed regardless of approach), removed the hardcoded "with you," from display, relocated the real `brand_kit`-driven follow-us/handle line from the closing slide to the conversation slide (the true last slide as of round 7), added anti-padding/split guidance (adapted from an audited pattern in another project) and a 10% word-budget tolerance, corrected same-round to be carousel-only (was briefly universal by mistake) and extended to `validator.py` so the app's own warning banner agrees with what the model is told | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; all rounds implementation/local-verification only so far, none yet run through a real `/generate` call |
 | 40 | Production text generation (`LLMProvider`, all callers) defaults to `gpt-5.6-luna`/`gpt-5.5` (OpenAI) instead of the locked Claude Haiku 4.5/Sonnet 5 | Anthropic production credits ran out entirely, plus real A/B evidence gpt-5.5 matched/beat Sonnet 5 on anchor authenticity and voice discipline; Claude path fully preserved and reversible via `LLM_PROVIDER=anthropic`, no redeploy needed |
-| 43-46 | **OPEN/EXPERIMENTAL** — carousel direct-write port (single-call writer, no critique/refine, free anchor pick guided by category+seed_angles) now wired into `routes/generate.py` as the default (`CAROUSEL_WRITER=direct_write`) for carousel, replacing the legacy chain for that call; its hero image generation runs **sequentially after** the text call, not in parallel — a direct deviation from blueprint Section 15's "text and image generation run as independent parallel lanes off the same brief" design, for carousel direct-write specifically (the legacy chain and `single_image` are both unaffected and still run their lanes in parallel as originally specced). Cross-topic anchor-convergence (independent generations landing on the same anchor, e.g. `career-burnout`/`wellness-burnout` both choosing "canary in a coal mine") is a real, still-open, still-unfixed gap, reconfirmed in this now-production-wired code path, not just the isolated POC it was first found in (`backend/app/poc/FINDINGS.md` #1) | Real testing found direct-write's single call outperformed 8 rounds of patching the legacy checklist prompt (`docs/direct-write-poc.md` Section 5); sequential image generation is a structural consequence of the single-call design, not a choice — mood/visual_subject aren't known until the one writer call returns, unlike the legacy chain's cheap-tier pre-sample that knows them before the strong-tier draft even starts; reversible via `CAROUSEL_WRITER=legacy`, not a hard cutover; anchor-convergence has no fix yet on either path (POC or production-wired) |
+| 43-46 | **OPEN/EXPERIMENTAL** — carousel direct-write port (single-call writer, no critique/refine, free anchor pick guided by category+seed_angles) now wired into `routes/generate.py` as the default (`CAROUSEL_WRITER=direct_write`) for carousel, replacing the legacy chain for that call; its hero image generation runs **sequentially after** the text call, not in parallel — a direct deviation from blueprint Section 15's "text and image generation run as independent parallel lanes off the same brief" design, for carousel direct-write specifically (the legacy chain and `single_image` are both unaffected and still run their lanes in parallel as originally specced). Cross-topic anchor-convergence (independent generations landing on the same anchor, e.g. `career-burnout`/`wellness-burnout` both choosing "canary in a coal mine") is a real, still-open, still-unfixed gap, reconfirmed in this now-production-wired code path, not just the isolated POC it was first found in (`backend/app/poc/FINDINGS.md` #1). Both the sequential-image tradeoff and the anchor-convergence gap now also apply to paste-link's own direct-write entry point (logbook #51), which reuses the same single-call, sequential-image design — not a second, separate deviation, the same one now confirmed at a second entry point | Real testing found direct-write's single call outperformed 8 rounds of patching the legacy checklist prompt (`docs/direct-write-poc.md` Section 5); sequential image generation is a structural consequence of the single-call design, not a choice — mood/visual_subject aren't known until the one writer call returns, unlike the legacy chain's cheap-tier pre-sample that knows them before the strong-tier draft even starts; reversible via `CAROUSEL_WRITER=legacy`, not a hard cutover; anchor-convergence has no fix yet on either path (POC or production-wired) |
