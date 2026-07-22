@@ -24,10 +24,25 @@ easily if the names aren't held apart precisely:
 | **v2** | Only the hand-written *refinements* to v1 — two of v1's four examples (Burnout, de Beauvoir) replaced with two new ones (mad money, amae), plus the techniques that replacement work made explicit (Section 4 below). | A prompt file. v2 is a set of hand-written reference pieces and the principles behind them, not code. |
 | **the production carousel prompt** | The prompt logic inside `backend/app/engine/generator.py` that `docs/logbook.md` #39 built and iterated across rounds 1–8 — the taxonomy-driven, sampled, critique/refine-gated carousel path that real users hit through `/generate`. | v1 or v2. Logbook #39 titles its own work "carousel-only 'v1'" — that self-labeling is **superseded by this document**. Everywhere in this file and going forward, "v1" means only the four hand-written references above; the production carousel prompt is never called v1 or v2. |
 | **the POC prompt** (or **the direct-write prompt**) | The standalone system prompt in `backend/app/poc/prompt.py`, built from v2's principles, used by the isolated `/poc` path. | v1 or v2. It is *built from* v2 — it is not v2 itself, and it is not the production carousel prompt either. |
+| **the carousel direct-write port** | The POC prompt's approach, ported into production (`backend/app/engine/generator.py::draft_carousel_direct`, `docs/logbook.md` #43-46) and wired into `routes/generate.py` as the default carousel writer (`CAROUSEL_WRITER=direct_write`). | v1 or v2 — it's *built from* the POC prompt's validated design, same as the POC prompt is built from v2, but it is real production code, not a reference example. |
+| **legacy** (as in `CAROUSEL_WRITER=legacy`) | The config flag's name (as of `docs/logbook.md` #47) for **the production carousel prompt** row above — same thing, just the literal string a caller sets to opt back into it now that the direct-write port is the default. | v1. This flag's value was originally `v1` and collided directly with this table — renamed specifically to stop that collision from recurring. |
 
 If you're cross-referencing `docs/logbook.md` #39 while reading this document,
 remember its "v1" is this document's "the production carousel prompt" —
 translate as you go.
+
+**If you are about to write code, a config value, a test name, or a comment
+that calls any pipeline or code path "v1" or "v2" — stop.** Those two words
+are reserved, permanently, for the four/six hand-written reference pieces
+above. Every pipeline, prompt, or code path gets its own real name instead
+("the production carousel prompt," "the carousel direct-write port,"
+"legacy," "the POC prompt") — never a version-number shorthand that
+collides with this table. This has already gone wrong twice: logbook #39
+originally called the production carousel prompt "v1" (superseded by this
+document, per the row above) and, later, the `CAROUSEL_WRITER` config flag
+also briefly used `v1` for its fallback value before being renamed to
+`legacy` (`docs/logbook.md` #47). Check this table before naming anything
+would-be "v1"-shaped a third time.
 
 ---
 

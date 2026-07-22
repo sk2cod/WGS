@@ -1184,6 +1184,26 @@ def _carousel_direct_mood_instruction() -> str:
     )
 
 
+# Adapted from generate_angle()'s existing visual_subject instruction
+# (angle_engine.py) -- same proven guidance (concrete, photographable,
+# never an abstract mood word or stock-photo trope), reworded to reference
+# the anchor this path has instead of the topic+angle pair generate_angle()
+# had. The actual wrapping of this into a styled DALL-E prompt reuses
+# brief_builder._hero_image_prompt() unchanged -- see draft_carousel_direct's
+# docstring; this function only asks the model to write the raw subject.
+def _carousel_direct_visual_subject_instruction() -> str:
+    return (
+        "Also write visual_subject: 5-15 words naming ONE concrete image, "
+        "object, or scene genuinely tied to THIS specific anchor — something "
+        'a photographer could actually go photograph (e.g. "a straw rope '
+        'tied across a threshold", "a folded bill inside a purse lining"). '
+        'Never an abstract mood word like "transformation", "growth", or '
+        '"balance", and never a generic stock-photo trope like a staircase '
+        "or a winding path — it must be recognizably specific to this "
+        "anchor, not swappable with any other post's."
+    )
+
+
 def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, topic: Topic, context: CarouselContext) -> str:
     voice_lines = "\n".join(f"- {s}" for s in brand_kit.voice_samples.poetic)
     forbidden = ", ".join(brand_kit.forbidden) or "none"
@@ -1212,6 +1232,7 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
         "no reasoning or alternatives — do your comparison silently, output only "
         "the result.\n\n"
         f"{_carousel_direct_mood_instruction()}\n\n"
+        f"{_carousel_direct_visual_subject_instruction()}\n\n"
         "Write the caption before anything else. The caption is the real piece — "
         "write it exactly as you would if slides didn't exist, one continuous "
         "flowing telling, start to finish, with the beat structure rule 9 "
@@ -1230,6 +1251,8 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
         '  "anchor": "<the specific real thing this piece is built around, in a '
         'few words>",\n'
         '  "mood": "wisdom | bold | celebratory",\n'
+        '  "visual_subject": "<5-15 words, one concrete photographable image tied '
+        'to the anchor>",\n'
         '  "caption": "<the full piece, written first, start to finish, in '
         'flowing prose>",\n'
         '  "headline_word": "...", "script_word": "...", "kicker": "...",\n'
@@ -1244,13 +1267,18 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
     )
 
 
-def _parse_carousel_direct_response(raw: str, brand_kit: BrandKit) -> tuple[GeneratedPost, str, str]:
+def _parse_carousel_direct_response(raw: str, brand_kit: BrandKit) -> tuple[GeneratedPost, str, str, str]:
     data = json.loads(strip_json_fence(raw))
 
     anchor = str(data.get("anchor") or "").strip()
     mood = str(data.get("mood") or "").strip().lower()
     if mood not in VALID_MOODS:
         mood = DEFAULT_MOOD
+    # Falls back to the anchor itself if the model omits this -- the anchor
+    # is already "the specific real thing this piece is built around," a
+    # reasonable stand-in image subject, same fallback shape
+    # generate_angle()'s _parse_angle_response uses (fallback_visual_subject).
+    visual_subject = str(data.get("visual_subject") or "").strip() or anchor
 
     raw_slides = [
         {
@@ -1291,7 +1319,7 @@ def _parse_carousel_direct_response(raw: str, brand_kit: BrandKit) -> tuple[Gene
         caption=str(data.get("caption", "")),
         hashtags=[str(h) for h in data.get("hashtags", [])],
     )
-    return post, anchor, mood
+    return post, anchor, mood, visual_subject
 
 
 def draft_carousel_direct(
@@ -1300,7 +1328,7 @@ def draft_carousel_direct(
     llm: LLMProvider,
     topic: Topic,
     context: CarouselContext,
-) -> tuple[GeneratedPost, str, str]:
+) -> tuple[GeneratedPost, str, str, str]:
     """The carousel direct-write port's single call — no draft/critique/refine
     loop. `brief` is a caller-supplied, provisional ContentBrief: its
     `requires_citation`/`sources`/`knowledge_hints`/`format` are real and used
@@ -1308,9 +1336,18 @@ def draft_carousel_direct(
     here and should be treated as placeholders by the caller, since on this
     path both are only known once this call returns — unlike sample_cell/
     generate_angle, where they're decided before any writing starts. Callers
-    should correct brief.angle/brief.mood/brief.hero_image_prompt from this
-    function's returned (anchor, mood) before using the brief for
-    validate_post or a MemoryRecord write.
+    should correct brief.angle/brief.mood from this function's returned
+    (anchor, mood) before using the brief for validate_post or a MemoryRecord
+    write.
+
+    Returns (post, anchor, mood, visual_subject). visual_subject is the
+    model's own raw image-subject text (same call, zero extra cost, same
+    pattern as mood/the cover fields/conversation_question) -- it is NOT yet
+    a styled hero_image_prompt. Callers should wrap it with the existing,
+    reused (not rebuilt) `brief_builder._hero_image_prompt(visual_subject,
+    mood)` -- the exact function generate_angle()'s own visual_subject
+    output is already wrapped through via build_brief() -- to get
+    brief.hero_image_prompt before calling the real image pipeline.
 
     No critique_post/refine_post call on this path, deliberately -- not an
     oversight. This mirrors what direct-write's isolated POC testing already

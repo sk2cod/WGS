@@ -27,9 +27,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
-from app.engine.angle_engine import SampledAngle, SingleImageStyle, generate_angle
-from app.engine.brief_builder import build_brief
-from app.engine.generator import generate_post, regenerate_slide, slide_text
+from app.engine.angle_engine import (
+    SampledAngle,
+    SingleImageStyle,
+    assemble_carousel_context,
+    generate_angle,
+)
+from app.engine.brief_builder import _hero_image_prompt, build_brief
+from app.engine.generator import draft_carousel_direct, generate_post, regenerate_slide, slide_text
 from app.engine.memory import MemoryStore
 from app.engine.validator import validate_post
 from app.models.brand_kit import BrandKit, MoodPalette
@@ -165,6 +170,53 @@ def _generate_hero(
     return _generate_hero_for_keyword(brief.hero_image_prompt, keyword, palette, image, settings)
 
 
+def _finalize_generation(
+    brief: ContentBrief,
+    post: GeneratedPost,
+    hero_bytes: bytes | None,
+    *,
+    brand_kit: BrandKit,
+    store: MemoryStore,
+    memory: list[MemoryRecord],
+    fingerprint: str,
+    category: str,
+    masthead: str,
+    anchor: str = "",
+) -> GenerateResponse:
+    """Shared tail for both the legacy chain and the carousel direct-write
+    port (logbook #43-46): validate, write the memory record, build the
+    response. `anchor` (logbook #43) is empty for every path except carousel
+    direct-write, which has a real one to record -- single_image and the
+    legacy carousel chain have no equivalent concept."""
+    validation = validate_post(brief, brand_kit, post, memory, fingerprint)
+
+    record = MemoryRecord(
+        id=str(uuid.uuid4()),
+        date=date.today(),
+        topic_id=brief.topic_id,
+        category=category,
+        angle=brief.angle,
+        approach=brief.approach,
+        format=brief.format,
+        mood=brief.mood,
+        hook=slide_text(post.slides[0])[:80] if post.slides else post.caption[:80],
+        fingerprint=fingerprint,
+        source_ids=[],
+        status="draft",
+        anchor=anchor,
+    )
+    store.append(record)
+
+    return GenerateResponse(
+        brief=brief,
+        post=post,
+        masthead=masthead,
+        hero_image_base64=base64.b64encode(hero_bytes).decode("ascii") if hero_bytes else None,
+        validation_errors=validation.errors,
+        memory_id=record.id,
+    )
+
+
 async def _generate_for_brief(
     brief: ContentBrief,
     *,
@@ -188,31 +240,86 @@ async def _generate_for_brief(
         post = await text_task
         hero_bytes = None
 
-    validation = validate_post(brief, brand_kit, post, memory, fingerprint)
-
-    record = MemoryRecord(
-        id=str(uuid.uuid4()),
-        date=date.today(),
-        topic_id=brief.topic_id,
-        category=category,
-        angle=brief.angle,
-        approach=brief.approach,
-        format=brief.format,
-        mood=brief.mood,
-        hook=slide_text(post.slides[0])[:80] if post.slides else post.caption[:80],
+    return _finalize_generation(
+        brief,
+        post,
+        hero_bytes,
+        brand_kit=brand_kit,
+        store=store,
+        memory=memory,
         fingerprint=fingerprint,
-        source_ids=[],
-        status="draft",
-    )
-    store.append(record)
-
-    return GenerateResponse(
-        brief=brief,
-        post=post,
+        category=category,
         masthead=masthead,
-        hero_image_base64=base64.b64encode(hero_bytes).decode("ascii") if hero_bytes else None,
-        validation_errors=validation.errors,
-        memory_id=record.id,
+    )
+
+
+async def _generate_carousel_direct(
+    *,
+    topic: Topic,
+    goal: str,
+    topics_by_id: dict[str, Topic],
+    brand_kit: BrandKit,
+    memory: list[MemoryRecord],
+    llm: LLMProvider,
+    image: ImageProvider,
+    settings: Settings,
+    store: MemoryStore,
+) -> GenerateResponse:
+    """Carousel direct-write port (docs/logbook.md #43-46), wired in behind
+    CAROUSEL_WRITER=direct_write. Sequential, not parallel, unlike
+    _generate_for_brief's carousel branch above -- mood/visual_subject
+    aren't known until the single writer call returns, so hero image
+    generation can't start until after it. The legacy chain's cheap-tier
+    generate_angle() call already knows mood/visual_subject before the
+    strong-tier draft even starts, so its hero image runs in parallel with
+    the text. This makes a direct-write carousel generation slower
+    end-to-end than legacy, not faster -- a real tradeoff of this design, not
+    a regression introduced by wiring it in."""
+    context = assemble_carousel_context(topic, memory)
+    # Provisional brief (logbook #43): angle/mood are placeholders here,
+    # corrected below once the writer call returns them. requires_citation/
+    # sources/knowledge_hints/format are real and already usable as-is.
+    brief_result = build_brief(
+        topic_id=topic.id,
+        topics_by_id=topics_by_id,
+        angle="(direct-write: pending, corrected after the writer call)",
+        approach=Approach.STORY,
+        mood="wisdom",
+        format=Format.CAROUSEL,
+        brand_kit=brand_kit,
+        memory=memory,
+        goal=goal,
+    )
+    provisional_brief = brief_result.brief
+
+    post, anchor, mood, visual_subject = await asyncio.to_thread(
+        draft_carousel_direct, provisional_brief, brand_kit, llm, topic, context
+    )
+    # Reused, not rebuilt (logbook #45) -- the exact same function
+    # generate_angle()'s own visual_subject is already wrapped through via
+    # build_brief().
+    hero_image_prompt = _hero_image_prompt(visual_subject, mood)
+    brief = provisional_brief.model_copy(
+        update={"angle": anchor, "mood": mood, "hero_image_prompt": hero_image_prompt}
+    )
+
+    hero_bytes = await asyncio.to_thread(_generate_hero, brief, brand_kit, image, settings)
+    # topic_id:anchor (logbook #43) -- the analog of the legacy chain's
+    # topic_id:sub_concept:approach fingerprint, now that anchor, not
+    # sub-concept, is the thing that shouldn't repeat on this path.
+    fingerprint = f"{topic.id}:{anchor}"
+
+    return _finalize_generation(
+        brief,
+        post,
+        hero_bytes,
+        brand_kit=brand_kit,
+        store=store,
+        memory=memory,
+        fingerprint=fingerprint,
+        category=topic.primary_category,
+        masthead=brief_result.masthead,
+        anchor=anchor,
     )
 
 
@@ -236,6 +343,34 @@ async def run_generate(
         raise KeyError(f"Unknown topic_id: {topic_id!r}")
 
     memory = store.load()
+
+    # Carousel direct-write port (logbook #43-46), default --
+    # CAROUSEL_WRITER=legacy is the opt-in fallback to the original chain
+    # below, same escape-hatch pattern as LLM_PROVIDER. Only ever applies to
+    # a fresh sample: `preselected` means the client already saw and
+    # accepted a real sample_cell-driven angle (via /generate/propose, or a
+    # daily pick's precomputed hook/thumbnail) -- a concept the direct-write
+    # path has no equivalent for, since one call decides everything at once
+    # with nothing to preview first. Honoring a preselected angle always
+    # uses the legacy chain regardless of this setting. single_image is
+    # completely unaffected either way -- it never reaches this branch.
+    if (
+        format == Format.CAROUSEL
+        and preselected is None
+        and settings.carousel_writer == "direct_write"
+    ):
+        return await _generate_carousel_direct(
+            topic=topic,
+            goal=goal,
+            topics_by_id=topics_by_id,
+            brand_kit=brand_kit,
+            memory=memory,
+            llm=llm,
+            image=image,
+            settings=settings,
+            store=store,
+        )
+
     sampled = (
         preselected
         if preselected is not None

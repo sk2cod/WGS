@@ -100,6 +100,36 @@ class _FakeImage:
         return buf.getvalue()
 
 
+def _direct_write_response_json(anchor: str) -> str:
+    """One real direct-write JSON response (logbook #43-46) -- word counts
+    sized inside carousel_body_teaching's real 35-50 range and
+    closing/conversation's real ranges, matching the actual writer's schema,
+    not the legacy chain's."""
+    body_text = (
+        "This is a full retold beat with enough real words to satisfy the "
+        "teaching body role's much higher floor, since a carousel_body_teaching "
+        "slide needs closer to two full sentences of real content."
+    )
+    return json.dumps({
+        "anchor": anchor,
+        "mood": "wisdom",
+        "visual_subject": "a folded paper on a wooden table",
+        "caption": "a caption",
+        "headline_word": "PAUSE",
+        "script_word": "first.",
+        "kicker": "short kicker",
+        "body_1_heading": "A heading",
+        "body_1_text": body_text,
+        "body_2_heading": "A heading",
+        "body_2_text": body_text,
+        "body_3_heading": "A heading",
+        "body_3_text": body_text,
+        "closing_takeaway": "Short body words alone were never going to look complete here",
+        "conversation_question": "What would you tell a friend who was standing exactly in your position right now?",
+        "hashtags": ["#a", "#b"],
+    })
+
+
 def _settings(**overrides) -> Settings:
     values = {"enable_critique": False, "image_quality": "low", "image_size": "1024x1536"}
     values.update(overrides)
@@ -121,7 +151,9 @@ def _isolated_hero_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(duotone_module, "CACHE_DIR", tmp_path / "heroes")
 
 
-def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
+def test_run_generate_carousel_legacy_returns_hero_and_writes_memory(tmp_path):
+    """legacy chain explicitly (CAROUSEL_WRITER=legacy) -- direct_write is
+    now the default (logbook #46), covered separately below."""
     store = MemoryStore(path=tmp_path / "memory.json")
     llm = _AdaptiveCarouselLLM([json.dumps({"angle": "a specific test angle", "mood": "bold"})])
     image = _FakeImage()
@@ -135,7 +167,7 @@ def test_run_generate_carousel_returns_hero_and_writes_memory(tmp_path):
             store=store,
             llm=llm,
             image=image,
-            settings=_settings(),
+            settings=_settings(carousel_writer="legacy"),
         )
     )
 
@@ -179,7 +211,8 @@ def test_run_generate_single_image_skips_hero_entirely(tmp_path):
     assert len(result.post.slides) == 1
 
 
-def test_run_generate_reruns_of_same_topic_yield_different_angle(tmp_path):
+def test_run_generate_legacy_reruns_of_same_topic_yield_different_angle(tmp_path):
+    """legacy chain explicitly -- see note on the test above."""
     store = MemoryStore(path=tmp_path / "memory.json")
     angle_1 = json.dumps({"angle": "angle one", "mood": "wisdom"})
     angle_2 = json.dumps({"angle": "angle two", "mood": "wisdom"})
@@ -194,13 +227,121 @@ def test_run_generate_reruns_of_same_topic_yield_different_angle(tmp_path):
         store=store,
         llm=llm,
         image=image,
-        settings=_settings(),
+        settings=_settings(carousel_writer="legacy"),
     )
     first = asyncio.run(run_generate(**kwargs))
     second = asyncio.run(run_generate(**kwargs))
 
     assert first.brief.angle != second.brief.angle
     assert len(store.load()) == 2
+
+
+def test_run_generate_carousel_direct_write_is_the_default(tmp_path):
+    """CAROUSEL_WRITER=direct_write is the default as of logbook #46 -- a
+    fresh (non-preselected) carousel request with no explicit override
+    routes through draft_carousel_direct, not the legacy chain. Confirmed by
+    the single-call LLM queue: the legacy chain would need a second
+    (cheap-tier) response for generate_angle and would fail with an empty
+    queue if it were reached."""
+    store = MemoryStore(path=tmp_path / "memory.json")
+    llm = _QueueLLM([_direct_write_response_json("a real test anchor")])
+    image = _FakeImage()
+
+    result = asyncio.run(
+        run_generate(
+            topic_id="mindset-self-doubt",
+            format=Format.CAROUSEL,
+            brand_kit=WGS_BRAND_KIT,
+            topics_by_id=get_topics_by_id(),
+            store=store,
+            llm=llm,
+            image=image,
+            settings=_settings(),  # carousel_writer defaults to "direct_write"
+        )
+    )
+
+    assert result.post.slides[0].template_id == "carousel_cover"
+    assert result.post.slides[1].template_id == "carousel_body_teaching"
+    assert result.post.slides[-1].template_id == "carousel_conversation"
+    assert result.brief.angle == "a real test anchor"
+    assert result.brief.mood == "wisdom"
+    assert result.hero_image_base64 is not None
+    assert image.call_count == 1
+
+    records = store.load()
+    assert len(records) == 1
+    assert records[0].anchor == "a real test anchor"
+    assert records[0].fingerprint == "mindset-self-doubt:a real test anchor"
+
+
+def test_run_generate_carousel_legacy_override_still_works(tmp_path):
+    """CAROUSEL_WRITER=legacy is the documented opt-in fallback -- confirms
+    the escape hatch actually routes to the old chain, not just that the
+    setting exists."""
+    store = MemoryStore(path=tmp_path / "memory.json")
+    llm = _AdaptiveCarouselLLM([json.dumps({"angle": "a legacy angle", "mood": "bold"})])
+    image = _FakeImage()
+
+    result = asyncio.run(
+        run_generate(
+            topic_id="mindset-self-doubt",
+            format=Format.CAROUSEL,
+            brand_kit=WGS_BRAND_KIT,
+            topics_by_id=get_topics_by_id(),
+            store=store,
+            llm=llm,
+            image=image,
+            settings=_settings(carousel_writer="legacy"),
+        )
+    )
+
+    assert result.brief.angle == "a legacy angle"
+    records = store.load()
+    assert records[0].anchor == ""  # legacy has no anchor concept
+
+
+def test_run_generate_carousel_preselected_bypasses_direct_write(tmp_path):
+    """A preselected angle (the /generate/propose round-trip, or a daily
+    pick's precomputed hook/thumbnail) means the client already accepted a
+    real sample_cell-driven angle -- direct_write has no equivalent to
+    preview, so it must always defer to the legacy chain here regardless of
+    CAROUSEL_WRITER. Confirmed by using an _AdaptiveCarouselLLM queue shaped
+    for the legacy draft call, not the direct-write schema -- this would
+    fail if the route incorrectly tried the direct-write path instead."""
+    from app.engine.angle_engine import SampledAngle
+    from app.models.enums import Approach, EntryPoint
+
+    store = MemoryStore(path=tmp_path / "memory.json")
+    llm = _AdaptiveCarouselLLM([])  # no angle call expected -- preselected skips generate_angle
+    image = _FakeImage()
+    preselected = SampledAngle(
+        sub_concept="a sub concept",
+        approach=Approach.QUESTION_REFLECTION,
+        entry_point=EntryPoint.A_QUESTION,
+        angle="the preselected angle",
+        mood="wisdom",
+        reason="",
+        visual_subject="a visual subject",
+        fingerprint="mindset-self-doubt:custom:question_reflection",
+    )
+
+    result = asyncio.run(
+        run_generate(
+            topic_id="mindset-self-doubt",
+            format=Format.CAROUSEL,
+            brand_kit=WGS_BRAND_KIT,
+            topics_by_id=get_topics_by_id(),
+            store=store,
+            llm=llm,
+            image=image,
+            settings=_settings(),  # direct_write default -- must still be bypassed
+            preselected=preselected,
+        )
+    )
+
+    assert result.brief.angle == "the preselected angle"
+    records = store.load()
+    assert records[0].anchor == ""  # legacy path, no anchor concept
 
 
 def test_run_generate_unknown_topic_raises_key_error(tmp_path):

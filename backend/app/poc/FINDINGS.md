@@ -76,6 +76,24 @@ exclusions. The real fix — state-aware, mirroring the production pipeline's
 `MemoryRecord.fingerprint` check in the angle engine — is still open and still
 not attempted.
 
+**Addendum 3 — this file's own scope note above ("this POC is a throwaway
+experiment that hasn't touched [the real pipeline]") is now stale for this
+specific finding.** The isolated POC's approach was ported into production
+as the carousel direct-write writer (`docs/logbook.md` #43-46,
+`engine/generator.py::draft_carousel_direct`), now wired into
+`routes/generate.py` as the real default for carousel `/generate` calls.
+The same convergence reconfirmed there in real testing: `career-burnout`
+and `wellness-burnout` — different categories, same topic name —
+independently landed on the same anchor ("canary in a coal mine"), same as
+kintsugi did here. This gap is real in both the isolated POC *and* the
+now-production-wired path, not just the former. `assemble_carousel_context()`
+carries the same manual, per-call `recent_anchors` avoid-list this file's
+Addendum 2 describes (sourced from real `MemoryRecord.anchor` values now,
+not a hand-fed test list) — confirmed to change the model's pick when
+populated, but still not a real dedup mechanism the way `sample_cell()`'s
+fingerprint exclusion is for the v1 chain. Tracked as still open in
+`docs/logbook.md`'s deviations summary table (row 43-46) as well as here.
+
 ---
 
 ## 2. RESOLVED — real "Failed to fetch" on the live `/poc` button, caused by a missing Railway env var, compounded by a CORS-masking bug

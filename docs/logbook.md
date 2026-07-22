@@ -2990,6 +2990,216 @@ already-experimental carousel-only line of work.
 
 ---
 
+## 45. OPEN, EXPERIMENTAL — carousel direct-write port gains a real hero image (`visual_subject`), reusing the existing prompt-styling logic
+
+**What changed, `generator.py`:** `draft_carousel_direct()`'s single call now
+also asks for `visual_subject` — 5-15 words naming one concrete,
+photographable image tied to the anchor, same zero-extra-cost pattern as
+`mood`/the cover fields/`conversation_question` (one more field in the same
+JSON, not a second call). The instruction text is adapted from
+`generate_angle()`'s own already-proven `visual_subject` guidance
+(`angle_engine.py`) — same "a photographer could actually go photograph,
+never an abstract mood word, never a stock-photo trope" bar, reworded to
+reference the anchor this path has instead of the topic+angle pair
+`generate_angle()` had. `_parse_carousel_direct_response()` falls back to
+the anchor itself if the model omits it, same fallback shape
+`_parse_angle_response`'s `fallback_visual_subject` already uses.
+`draft_carousel_direct()` now returns `(post, anchor, mood,
+visual_subject)`.
+
+**Checked before writing anything, per the actual ask — reused, not
+rebuilt:** `brief_builder._hero_image_prompt(subject, mood)` already exists
+(`f"Abstract, editorial, textural image of {subject}, no literal faces or
+text, {mood} mood."`) and is already imported and reused as-is by
+`sources/paste_link.py` for its own visual_subject. No new styling logic
+was written — this path's caller wraps its raw `visual_subject` through
+that exact same function before calling the real image pipeline, the same
+way `build_brief()` already does for `generate_angle()`'s output.
+
+**Verified, real API calls, real image pipeline, 4 fresh topics
+(`mindset-rest`, `career-perfectionism`, `relationships-burnout`,
+`health-reproductive-health`):** ran `draft_carousel_direct()`, wrapped the
+real `visual_subject` through the real, unmodified `_hero_image_prompt()`,
+called the real `ImageProvider` (GPT Image 2) and the real
+`duotone_and_cache()` — not mocked, not just a string check. Four real
+hero images produced and read directly, not assumed from a prompt string:
+a screened sleeping porch with a white iron bed; a kintsugi-repaired
+ceramic bowl; a kitchen table with folded laundry and papers; a folded
+paper exam gown on an exam table. All four read as genuinely on-brand —
+abstract, editorial, textural, zero literal faces or people (so no uncanny-
+face risk at all, since the visual_subject instruction steers toward
+objects/scenes rather than people), each specifically tied to its own
+anchor rather than a generic or swappable image. The citation-required
+topic (`health-reproductive-health`) produced a tasteful, non-clinical-
+feeling image despite the sensitive subject matter.
+
+**Full backend suite: 132/132 passing.**
+
+**Not a blueprint deviation** — continuation of #39/#43/#44's already-
+logged, already-experimental carousel-only line of work; reuses an existing
+function rather than introducing a new design decision.
+
+---
+
+## 46. OPEN, EXPERIMENTAL — carousel direct-write port wired into `routes/generate.py` as the real path, `CAROUSEL_WRITER=direct_write` default
+
+**What changed:** `run_generate()` now branches for a fresh (non-preselected)
+carousel request: `CAROUSEL_WRITER=direct_write` (the new default) routes to
+a new `_generate_carousel_direct()`, replacing `sample_cell` →
+`generate_angle` → `build_brief` → `generate_post` for that call.
+`CAROUSEL_WRITER=legacy` is the opt-in fallback to the exact original chain,
+same escape-hatch pattern as `LLM_PROVIDER` — not a hard cutover. (Renamed
+from an original `v1` value in logbook #47 — `docs/direct-write-poc.md`
+locks "v1"/"v2" to mean only the hand-written reference pieces, never a
+pipeline; this flag's old chain is "legacy", not "v1", full stop.)
+`single_image` never reaches this branch at all and is completely
+unaffected. `_generate_for_brief`'s validate/memory-write/response tail was
+factored into a shared `_finalize_generation()` helper so both chains build
+their `GenerateResponse`/`MemoryRecord` the same way — `anchor` (empty for
+every other path) now gets populated from the writer's real output for
+carousel direct-write, not left blank.
+
+**Explicit check done, not assumed, per the actual ask: does
+`engine/selector.py`'s coverage/diversity weighting read `approach` from
+memory records?** No. Read `_topic_weight()` and `select_daily_picks()`
+directly: coverage weighting only counts `MemoryRecord.topic_id`
+occurrences, and category-variety enforcement only reads
+`topic.primary_category` — neither touches `approach` anywhere. Confirmed
+by grep (`grep -n "\.approach\b" selector.py`): the only two hits are
+storing a *freshly sampled* `sampled.approach` on a new `DailyPick`, never
+reading it back from historical memory. So hardcoding `approach=STORY` as
+pure plumbing for every direct-write carousel post cannot break this
+specific signal — it was never approach-aware to begin with.
+
+**A related, real, distinct finding surfaced along the way, reported
+either way per the ask:** `build_daily_pick()` still calls the unmodified
+`generate_angle()`/`sample_cell()` for its own hook/thumbnail preview,
+which *does* do approach-aware fingerprint exclusion (`topic:sub_concept:
+approach`) — entirely separate machinery, unaffected by this wiring, since
+daily-picks previews never call `draft_carousel_direct` regardless of
+`CAROUSEL_WRITER`. But direct-write's own memory records carry a
+differently-shaped fingerprint (`topic_id:anchor`), so they're invisible to
+`sample_cell()`'s own exclusion set — a real, orthogonal consequence:
+direct-write's generation history doesn't feed back into `single_image`'s
+or legacy-carousel's non-repetition check on the same topic, and vice versa.
+Not fixed here, not blueprint-relevant to fix silently — flagged for
+whoever picks up cross-path non-repetition next.
+
+**A real, honest architectural tradeoff, not glossed over:** the legacy
+chain's cheap-tier `generate_angle()` call already knows mood/visual_subject
+*before* the strong-tier draft starts, so its hero image generation runs in
+parallel with the text (`asyncio.gather`). Direct-write's mood/
+visual_subject aren't known until the single writer call returns, so hero
+generation must run sequentially after it. A direct-write carousel
+generation is slower end-to-end than legacy, not faster — a real cost of
+this design, not a regression introduced by wiring it in.
+
+**Preselected angles always bypass direct-write, on purpose.** A
+`preselected` `SampledAngle` means the client already saw and accepted a
+real `sample_cell`-driven proposal (`/generate/propose`, or a daily pick's
+precomputed hook/thumbnail) — direct-write has no equivalent to preview
+first, one call decides everything at once. `run_generate()` checks
+`preselected is None` before routing to direct-write, so any preselected
+carousel request — including every daily-pick tap, since picks are built
+via `generate_angle` — still uses the legacy chain today regardless of
+`CAROUSEL_WRITER`. This is a real, deliberate scope boundary of this wiring
+pass, not an oversight; whether daily-pick taps should also eventually use
+direct-write is a separate, undecided product question.
+
+**Verified, real API calls, real end-to-end `/generate`-shaped calls
+against real Supabase — not each piece in isolation:**
+- **Non-citation topic** (`mindset-perfectionism`): anchor *"sampler girls'
+  stitched mistakes"*, mood `wisdom`, hero image generated (real GPT Image
+  2 + duotone, viewed directly — abstract, editorial, no faces), validation
+  passed clean, real `MemoryRecord` written to Supabase and **read back
+  in a fresh query** with the correct anchor intact — confirms the anchor
+  column (logbook #43, applied live in a separate migration step) actually
+  round-trips through the real database, not just exists as a column.
+- **Citation-required topic** (`wellness-stress-regulation`): anchor
+  *"mammalian diving reflex"*, same full chain, same clean result,
+  read-back confirmed.
+- **Daily-picks/selector confirmed to behave sanely afterward**, against
+  real current memory (145 records, including the two direct-write records
+  just written): `select_daily_picks()` still returns 3 picks with correct
+  category variety, `_topic_weight()` computes normally for a topic that
+  now has direct-write-shaped records in its history. Existing
+  `test_selector.py`/`test_picks_route.py` suites (16 tests) pass
+  unchanged, since `selector.py` itself was never touched.
+- **Full backend suite: 135/135 passing** (132 plus 3 new tests: direct_write
+  is confirmed the real default, the `legacy` override is confirmed to
+  actually route there rather than just existing as a setting, and a
+  preselected angle is confirmed to bypass direct-write). Two pre-existing
+  carousel tests were re-pinned to `carousel_writer="legacy"` since they
+  specifically exercise that chain's fixtures, not renamed away — they
+  still cover exactly what they always did. (Both the flag value and these
+  tests were originally named `v1`/`carousel_writer="v1"` — renamed to
+  `legacy` in logbook #47 to remove the collision with
+  `docs/direct-write-poc.md`'s locked "v1"/"v2" terminology.)
+
+**Not a blueprint deviation in the usual sense** — continuation of
+#39/#43-45's already-logged, already-experimental carousel-only line of
+work, now live-reachable via the real `/generate` route (gated, reversible,
+not a hard cutover) rather than only verified in isolated scripts.
+
+---
+
+## 47. Renamed `CAROUSEL_WRITER`'s fallback value from `v1` to `legacy` — a real terminology collision, not cosmetic
+
+**Symptom:** `docs/direct-write-poc.md` Section 1 locks "v1"/"v2" to mean
+*only* the four/six hand-written writing-style reference pieces (Shimenawa,
+Shmita, mad money, amae) — explicitly, permanently never a pipeline or code
+path, and explicitly calling out that logbook #39's own original "carousel-
+only 'v1'" self-labeling is superseded by that lock. #46's
+`CAROUSEL_WRITER=v1` flag value (added the same session, after that lock
+was already written) directly re-created the exact collision that document
+exists to prevent — a second instance of the same mistake #39 made first.
+
+**Fix:** renamed the flag's fallback value from `"v1"` to `"legacy"`
+everywhere: `config.py` (default/comment), `routes/generate.py` (every
+comment/docstring reference to "the v1 chain"), `.env`/`.env.example`,
+and `tests/test_generate_route.py` (both the `carousel_writer="v1"` setting
+overrides and the test function names/docstrings that referenced it —
+`test_run_generate_carousel_v1_returns_hero_and_writes_memory` →
+`..._legacy_...`, etc.). `routes/generate.py` never hardcoded the literal
+string `"v1"` in any comparison (only `== "direct_write"`, treating
+anything else as fallback), so the rename touched no runtime branching
+logic, only strings, comments, and test fixtures.
+
+**Terminology note added in three places, not just the rename itself:**
+1. `config.py`, directly beside the flag's own definition — an explicit
+   "if you're about to type 'v1' to describe a pipeline or code path
+   anywhere in this codebase, stop" comment.
+2. `docs/direct-write-poc.md` Section 1 — two new rows added to the locked
+   terminology table (**the carousel direct-write port**; **legacy**, as in
+   `CAROUSEL_WRITER=legacy`), plus a new explicit paragraph naming both
+   times this exact collision has now happened (logbook #39's original
+   self-labeling, and this flag) and stating the rule plainly for next
+   time: every pipeline/code path gets a real name, never a version-number
+   shorthand.
+3. `CLAUDE.md`'s carousel-port status paragraph, inline at the point the
+   flag is introduced.
+
+**Verified:** full backend suite still **135/135 passing** after the
+rename — confirms the rename touched no runtime branching logic, only
+strings/comments/test names, exactly as expected from reading
+`routes/generate.py`'s actual comparison logic first rather than assuming.
+
+**Explicitly out of scope, flagged rather than silently left alone:**
+logbook #39's own historical "carousel-only 'v1' content-voice experiment"
+phrasing (used throughout #39's own entries, predating
+`docs/direct-write-poc.md`'s lock) and the unrelated `CAROUSEL_V1_APPROACHES`
+Python constant (`taxonomy/approaches.py`) are a second, older, larger
+instance of the same underlying collision — not touched here. This task
+was scoped specifically to the `CAROUSEL_WRITER` flag; renaming `logbook
+#39`'s own historical entries or a real, already-shipped Python identifier
+used throughout `angle_engine.py`/`generator.py` would be a separate,
+larger, riskier change than what was asked, not a natural extension of it.
+
+**Not a blueprint deviation** — a terminology/naming fix, not a design
+change.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -3005,3 +3215,4 @@ already-experimental carousel-only line of work.
 | 25 | Browse screen rebuilt as category-first, strict `primary_category` filtering — no more flat multi-tag topic list | Keeps the browse category and the masthead's counted category always consistent; blueprint Section 5's multi-tag display could show the same topic under a category tile that doesn't match its actual masthead label |
 | 39 | **OPEN/EXPERIMENTAL, 8 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues; round 7 added a real `carousel_conversation` slide (first structural, not prompt-only, change) and fixed a render-time emoji glyph gap; round 8 raised body slides 1–2 → 3 (6 slides total now, fixed regardless of approach), removed the hardcoded "with you," from display, relocated the real `brand_kit`-driven follow-us/handle line from the closing slide to the conversation slide (the true last slide as of round 7), added anti-padding/split guidance (adapted from an audited pattern in another project) and a 10% word-budget tolerance, corrected same-round to be carousel-only (was briefly universal by mistake) and extended to `validator.py` so the app's own warning banner agrees with what the model is told | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; all rounds implementation/local-verification only so far, none yet run through a real `/generate` call |
 | 40 | Production text generation (`LLMProvider`, all callers) defaults to `gpt-5.6-luna`/`gpt-5.5` (OpenAI) instead of the locked Claude Haiku 4.5/Sonnet 5 | Anthropic production credits ran out entirely, plus real A/B evidence gpt-5.5 matched/beat Sonnet 5 on anchor authenticity and voice discipline; Claude path fully preserved and reversible via `LLM_PROVIDER=anthropic`, no redeploy needed |
+| 43-46 | **OPEN/EXPERIMENTAL** — carousel direct-write port (single-call writer, no critique/refine, free anchor pick guided by category+seed_angles) now wired into `routes/generate.py` as the default (`CAROUSEL_WRITER=direct_write`) for carousel, replacing the legacy chain for that call; its hero image generation runs **sequentially after** the text call, not in parallel — a direct deviation from blueprint Section 15's "text and image generation run as independent parallel lanes off the same brief" design, for carousel direct-write specifically (the legacy chain and `single_image` are both unaffected and still run their lanes in parallel as originally specced). Cross-topic anchor-convergence (independent generations landing on the same anchor, e.g. `career-burnout`/`wellness-burnout` both choosing "canary in a coal mine") is a real, still-open, still-unfixed gap, reconfirmed in this now-production-wired code path, not just the isolated POC it was first found in (`backend/app/poc/FINDINGS.md` #1) | Real testing found direct-write's single call outperformed 8 rounds of patching the legacy checklist prompt (`docs/direct-write-poc.md` Section 5); sequential image generation is a structural consequence of the single-call design, not a choice — mood/visual_subject aren't known until the one writer call returns, unlike the legacy chain's cheap-tier pre-sample that knows them before the strong-tier draft even starts; reversible via `CAROUSEL_WRITER=legacy`, not a hard cutover; anchor-convergence has no fix yet on either path (POC or production-wired) |
