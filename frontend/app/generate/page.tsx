@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { generatePost, proposeApproach } from "@/lib/api";
-import type { ApiFormat, ProposeResponse, SingleImageStyle } from "@/lib/api-types";
+import { generatePost, getTopics, proposeApproach } from "@/lib/api";
+import type { ApiFormat, ProposeResponse, SingleImageStyle, Topic } from "@/lib/api-types";
 import { saveCurrentPost } from "@/lib/session-store";
 import {
   cardStyle,
@@ -25,6 +25,29 @@ const APPROACH_LABELS: Record<string, string> = {
   common_mistakes: "Common Mistakes",
 };
 
+// Carousel generation runs the direct-write port (docs/logbook.md #43-46):
+// one call writes the piece, then the hero image generates AFTER it, not
+// alongside it (mood/visual_subject aren't known until the writer call
+// returns) -- a real, documented slower-end-to-end tradeoff, not a bug.
+// These stages exist so the wait reads as "working through stages," not
+// "stuck," while that's happening. Thresholds are a reasonable estimate,
+// not measured telemetry -- fine either way since they're reassurance
+// text, not a progress bar making a precision claim.
+const CAROUSEL_WAIT_STAGES: { at: number; label: string }[] = [
+  { at: 0, label: "Writing your carousel — picking its own anchor and drafting the whole piece in one pass…" },
+  { at: 15, label: "Still writing — this is a single longer call, not several short ones." },
+  { at: 30, label: "Text is likely done — generating the hero image next (that step runs after the writing, not alongside it)." },
+  { at: 50, label: "Almost there — styling the hero image now." },
+];
+
+function carouselWaitMessage(elapsedSeconds: number): string {
+  let message = CAROUSEL_WAIT_STAGES[0].label;
+  for (const stage of CAROUSEL_WAIT_STAGES) {
+    if (elapsedSeconds >= stage.at) message = stage.label;
+  }
+  return message;
+}
+
 export default function GeneratePage() {
   return (
     <Suspense fallback={null}>
@@ -40,16 +63,45 @@ function GenerateScreen() {
 
   const [format, setFormat] = useState<ApiFormat>("carousel");
   const [singleImageStyle, setSingleImageStyle] = useState<SingleImageStyle>("quote");
+  const [topics, setTopics] = useState<Topic[] | null>(null);
   const [proposal, setProposal] = useState<ProposeResponse | null>(null);
   const [proposing, setProposing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Only carousel's header needs this -- single_image already gets its topic
+  // name from the propose response, unchanged. Fetched once, independent of
+  // format/topicId changes.
+  useEffect(() => {
+    getTopics()
+      .then(setTopics)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!topicId) return;
-    void loadProposal();
+    // Carousel skips the propose/preview step entirely (logbook #50) --
+    // direct-write picks its own anchor at generation time, so there is
+    // nothing to preview first. single_image's propose-then-accept flow
+    // below is completely unchanged.
+    if (format === "single_image") {
+      void loadProposal();
+    } else {
+      setProposal(null);
+      setError(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topicId, format, singleImageStyle]);
+
+  useEffect(() => {
+    if (!generating || format !== "carousel") {
+      setElapsedSeconds(0);
+      return;
+    }
+    const id = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [generating, format]);
 
   async function loadProposal() {
     if (!topicId) return;
@@ -67,20 +119,23 @@ function GenerateScreen() {
   }
 
   async function handleGenerate() {
-    if (!topicId || !proposal) return;
+    if (!topicId) return;
+    if (format === "single_image" && !proposal) return;
     setGenerating(true);
     setError(null);
     try {
       const generated = await generatePost(
         topicId,
         format,
-        {
-          angle: proposal.angle,
-          approach: proposal.approach,
-          mood: proposal.mood,
-          visual_subject: proposal.visual_subject,
-          fingerprint: proposal.fingerprint,
-        },
+        format === "single_image"
+          ? {
+              angle: proposal!.angle,
+              approach: proposal!.approach,
+              mood: proposal!.mood,
+              visual_subject: proposal!.visual_subject,
+              fingerprint: proposal!.fingerprint,
+            }
+          : undefined,
         format === "single_image" ? singleImageStyle : undefined,
       );
       saveCurrentPost(generated);
@@ -102,13 +157,16 @@ function GenerateScreen() {
     );
   }
 
+  const carouselTopicName = topics?.find((t) => t.id === topicId)?.name;
+  const headerTitle = format === "single_image" ? proposal?.topic_name : carouselTopicName;
+
   return (
     <main style={screenStyle}>
       <header>
         <button style={ghostButtonStyle} onClick={() => router.push("/")}>
           ← Back
         </button>
-        <h1 style={{ fontSize: 22, marginTop: 8 }}>{proposal?.topic_name ?? "Loading…"}</h1>
+        <h1 style={{ fontSize: 22, marginTop: 8 }}>{headerTitle ?? "Loading…"}</h1>
       </header>
 
       <section style={{ display: "flex", gap: 8 }}>
@@ -151,9 +209,9 @@ function GenerateScreen() {
 
       {error && <ErrorBanner message={error} />}
 
-      {proposing && <p style={{ opacity: 0.6 }}>Thinking of an angle…</p>}
+      {format === "single_image" && proposing && <p style={{ opacity: 0.6 }}>Thinking of an angle…</p>}
 
-      {proposal && !proposing && (
+      {format === "single_image" && proposal && !proposing && (
         <section style={cardStyle}>
           <div style={labelStyle}>AI proposes</div>
           <div style={{ fontSize: 19, fontWeight: 700 }}>
@@ -176,6 +234,30 @@ function GenerateScreen() {
           >
             {generating ? "Generating…" : "Generate"}
           </button>
+        </section>
+      )}
+
+      {format === "carousel" && (
+        <section style={cardStyle}>
+          <div style={labelStyle}>Ready to generate</div>
+          <div style={{ fontSize: 15, lineHeight: 1.4, opacity: 0.75 }}>
+            This picks its own anchor and writes the full carousel in one pass —
+            there&rsquo;s no angle preview to accept first.
+          </div>
+
+          <button
+            style={{ ...primaryButtonStyle, marginTop: 12, opacity: generating ? 0.6 : 1 }}
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating ? "Generating…" : "Generate"}
+          </button>
+
+          {generating && (
+            <p style={{ fontSize: 13, opacity: 0.65, marginTop: 8 }}>
+              {carouselWaitMessage(elapsedSeconds)}
+            </p>
+          )}
         </section>
       )}
     </main>

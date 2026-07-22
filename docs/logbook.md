@@ -3200,7 +3200,191 @@ change.
 
 ---
 
-## Summary — deviations from the original design docs
+## 48. `/picks` 500ing in production — Railway's `LLM_MODEL_CHEAP`/`LLM_MODEL_STRONG` were still pinned to pre-migration Claude model strings
+
+**Symptom:** reported urgent — daily picks (`GET /picks`) failing live in
+production, apparently "calling Anthropic despite the provider migration."
+
+**Investigation:** reproduced directly rather than reading code and
+guessing. Local repro (`.env`'s real `LLM_MODEL_CHEAP=gpt-5.6-luna`/
+`LLM_MODEL_STRONG=gpt-5.5`) worked cleanly end-to-end — `GET /picks`
+returned a real, freshly-computed `DailyPicksResult`, confirming
+`get_or_compute_daily_picks`/`generate_angle`/`LLMProvider` all work
+correctly as written. Checked every `LLMProvider(...)` call site in
+`app/routes/*.py` for an explicit `provider="anthropic"` override that
+the migration might have missed — none exist; `/picks` (`routes/picks.py`)
+constructs `LLMProvider()` plain, same as every other route.
+
+`railway variables` (real production values, not assumed) showed the
+actual mismatch: `LLM_PROVIDER` was never set on Railway at all — harmless,
+since `config.py`'s default is already `"openai"` — but `LLM_MODEL_CHEAP`
+and `LLM_MODEL_STRONG` were still set as explicit Railway service
+variables to their pre-migration values, `claude-haiku-4-5-20251001` and
+`claude-sonnet-5`. Railway variables override `Settings`' Python-level
+defaults, so these two leftover variables silently kept shadowing
+`config.py`'s new `gpt-5.6-luna`/`gpt-5.5` defaults ever since the
+migration shipped (`docs/logbook.md` migration entry) — the model-name
+variables were never part of that migration's own checklist.
+
+Reproduced the exact production failure locally (real env-var match:
+`LLM_PROVIDER` unset, `LLM_MODEL_CHEAP`/`LLM_MODEL_STRONG` set to the
+Claude strings) and got the identical crash, real traceback, not a guess:
+
+```
+openai.NotFoundError: Error code: 404 - {'error': {'message': 'The model
+`claude-haiku-4-5-20251001` does not exist or you do not have access to
+it.', 'type': 'invalid_request_error', 'param': None, 'code':
+'model_not_found'}}
+```
+
+The provider-selection half of the migration (`LLMProvider` defaulting to
+`"openai"`) was genuinely live and working correctly in production — the
+request really did go to OpenAI's API, using the real OpenAI client and
+key. It just carried a Claude model name into that request, because the
+model-name variables were a separate, unmigrated piece of config. Not an
+Anthropic-path bug, and not a missed code path — a stale ops/env-config
+gap the code-level migration never touched.
+
+**Fix:** `railway variable set LLM_MODEL_CHEAP=gpt-5.6-luna --service
+wgs-backend` and `railway variable set LLM_MODEL_STRONG=gpt-5.5 --service
+wgs-backend`. Each `variable set` call triggers Railway's normal
+auto-redeploy (not a manual `railway up`); confirmed the deploy completed
+(`railway status` returning to plain `Online`, no `Building`/`Deploying`)
+before considering this done.
+
+**Verified live, not just deployed:** `curl
+https://wgs-backend-production.up.railway.app/picks` after the redeploy
+returned real HTTP 200 with a freshly-computed `DailyPicksResult` (real
+topic/angle/hook/thumbnail content, not cached leftovers from the broken
+state) — confirms the fix is live in production, not just committed
+config.
+
+**Not a blueprint/implementation-guide deviation** — an environment
+configuration drift bug (two Railway variables left stale after a model
+migration), not a design decision. Worth noting as a process gap for any
+future model migration: updating `config.py`'s defaults is not sufficient
+by itself if a target platform has the old values pinned as explicit
+environment variables — those need an explicit audit/update step too, not
+just an assumption that removing/changing a Python default takes effect
+everywhere.
+
+---
+
+## 49. Correction — direct-write is not reachable from any current frontend flow, not just daily-pick taps
+
+**Symptom:** none in production; caught by directly tracing the real
+tap-to-generate flow rather than reading `#46`'s own claim at face value.
+`#46`/`CLAUDE.md` had asserted "a preselected angle (from
+`/generate/propose`, or any daily-pick tap, since picks are built via
+`generate_angle`) always still uses legacy" — worded as if a daily pick's
+own precomputed hook/angle were the thing becoming `preselected`.
+
+**Investigation:** traced the actual frontend code, not assumed.
+`frontend/app/page.tsx`'s `goToGenerate(topicId)` is the `onCreate`
+handler for both a daily-pick card tap (`TodaysPick`/`PickCard`) and a
+plain category-browse tap — identical function, no distinction between
+entry points. It only carries `topic_id` via a query param; the daily
+pick's own precomputed `angle`/`approach`/`mood`/`hook` (`DailyPick`,
+`selector.py`) is discarded entirely, never reaching `/generate`.
+`GenerateScreen` (`frontend/app/generate/page.tsx`) then unconditionally
+calls `POST /generate/propose` on mount (`loadProposal`, a fresh
+`generate_angle()` sample, independent of the daily pick) before any
+"Generate" tap is even possible — the button that calls `generatePost()`
+only renders once a proposal exists, and `handleGenerate` always passes
+that proposal's `angle`/`approach`/`mood`/`visual_subject`/`fingerprint`
+as the preselected fields. `generatePost`'s `accepted` parameter is
+optional in `lib/api.ts`, but has exactly one call site in the whole
+frontend (`generate/page.tsx:74`), and that call site always supplies it.
+
+Net effect: every carousel `/generate` call the current UI can ever
+produce arrives with all five preselected fields set — `preselected` is
+never `None` on the live frontend, for any entry point. Direct-write's
+`preselected is None` gate (`routes/generate.py::run_generate`) is
+correct and doing exactly what it's supposed to do; the gap is that
+nothing in the current UI can ever satisfy it, not something specific to
+daily picks.
+
+**Fix:** corrected `CLAUDE.md`'s wording to state this precisely — the
+daily pick's own precomputed angle/hook is discarded rather than
+preselected, and the real reason legacy is forced is that `GenerateScreen`
+always routes through `/generate/propose` first, for every entry point.
+Also named the practical consequence explicitly: direct-write cannot run
+outside of tests today without a UI path that calls `/generate` without a
+preselected angle — not merely a hypothetical, a real prerequisite for
+this port to ever be exercised live.
+
+**Verified:** confirmed by direct code trace (`page.tsx`, `generate/page.tsx`,
+`api.ts`), not inference — `generatePost`'s single call site and its
+always-populated `accepted` argument were read directly, not assumed from
+the function signature alone.
+
+**Not a blueprint deviation** — a documentation-accuracy correction about
+an existing, already-shipped scope boundary (logbook #46), not a new
+design decision or code change. No code was touched.
+
+---
+
+## 50. Carousel skips the propose/preview step so a real UI tap can actually reach direct-write
+
+**Symptom:** logbook #49 established that direct-write (logbook #43-46)
+was unreachable from any live frontend flow — every carousel `/generate`
+call the UI could produce always carried a preselected angle (from a
+`/generate/propose` roll), which forces `run_generate` down the legacy
+chain regardless of `CAROUSEL_WRITER`. Direct-write existed, was wired in,
+and was fully tested against the backend directly, but had never actually
+been exercised by a real tap through the app.
+
+**Fix:** `frontend/app/generate/page.tsx`, carousel-only — `single_image`
+is completely untouched.
+- `GenerateScreen`'s effect no longer calls `loadProposal()`/
+  `proposeApproach()` when `format === "carousel"`; it just clears any
+  leftover `proposal` state. `single_image` still calls it exactly as
+  before, on the same `[topicId, format, singleImageStyle]` dependencies.
+- Carousel's `handleGenerate` calls `generatePost(topicId, "carousel")`
+  with the `accepted` argument omitted entirely, so the `POST /generate`
+  body carries no `angle`/`approach`/`mood`/`visual_subject`/`fingerprint`
+  — `preselected` is genuinely `None` on the backend, the same shape a
+  fresh (non-preselected) call already needed.
+- Since carousel no longer has a proposal to read `topic_name` from for
+  the header, added one `getTopics()` fetch (on mount, independent of
+  format) and look up the name by `topic_id` — `single_image`'s header
+  still reads `proposal.topic_name`, unchanged.
+- Loading state: added a `CAROUSEL_WAIT_STAGES` list and an elapsed-seconds
+  ticker (only running while `generating && format === "carousel"`) so the
+  wait shows staged reassurance text ("writing," then "likely done,
+  generating the hero image next," then "styling the hero image now")
+  instead of a static "Generating…" that would otherwise read as stuck
+  during direct-write's longer, sequential (not parallel) end-to-end time
+  — the real tradeoff already tracked in the deviations table, row 43-46.
+  Thresholds (0/15/30/50s) are a reasonable estimate for reassurance text,
+  not a measured progress bar making a precision claim. `single_image`'s
+  button still just reads "Generating…", unchanged.
+
+**Verified with a real UI tap-through, not a script bypassing the
+frontend, and not code review alone** — this was explicitly required
+given the earlier gap this closes was itself found by tracing code, not
+by using the app. Ran the real local frontend (`next dev`) against the
+real local backend (`uvicorn`), added temporary `print()` diagnostics to
+`_generate_carousel_direct` and `_generate_for_brief` (removed
+immediately after confirming — `git diff --stat` on `generate.py` shows
+no residual diff), and had the actual app tapped through in a real
+browser:
+- Carousel: tap → `GET /topics` → straight to `POST /generate` with no
+  `/generate/propose` call in between → `_generate_carousel_direct`
+  invoked (confirmed by the temporary log line) → HTTP 200.
+- Single image: tap → `POST /generate/propose` (200, preview step still
+  runs) → "Generate" tap → `POST /generate` → `_generate_for_brief`
+  (legacy `generate_post`) invoked, `format=Format.SINGLE_IMAGE` →
+  HTTP 200.
+
+Full backend suite 135/135 afterward (no backend code changed this
+round — `generate.py`'s diagnostics were added and then fully reverted;
+the real change is frontend-only).
+
+**Not a blueprint deviation** — implements the scope boundary logbook #46
+already documented as deliberate ("direct-write has nothing to preview
+first") by giving carousel its own no-preview UI path, rather than
+changing what that boundary means.
 
 | # | Deviation | Why |
 |---|---|---|
