@@ -3855,6 +3855,302 @@ new design decision.
 
 ---
 
+## 55. Closing slide (S5) content derived from the caption's actual ending instead of a separate written-from-scratch field, plus a stale single-line edit form fixed to a textarea
+
+**Symptom 1 (content):** real testing kept showing `closing_takeaway`
+(logbook #53's real 2-4 sentence build) read weaker and more generic than
+the caption's own actual final sentences — the exact problem the body
+slides already solved (logbook #19/#43): a field written as new,
+from-scratch content is a worse writing task than adapting something the
+model has already written well. `closing_takeaway`'s own instruction
+literally told the model to invent "a new feeling... hasn't already stated
+outright," directly working against reusing the caption's own strong
+ending.
+
+**Fix 1:** `_carousel_direct_closing_instruction()` (`generator.py`)
+rewritten to the same derive-not-invent pattern the body-distillation
+instruction already uses: `closing_takeaway` is now explicitly the
+caption's own actual final beat — same image, same idea — closely adapted
+for its own slide, never copied verbatim, never a new conclusion invented
+separately. The old "new feeling... hasn't already stated outright"
+framing was removed outright, since it directly contradicted deriving from
+what the caption has, in fact, already stated. Prompt-text-only change,
+same JSON field, no schema/model/validator change — full backend suite
+still 143/143.
+
+**Symptom 2 (UI):** the swipe-editor's edit form for the closing slide
+(`SlideEditForm`, `editor/page.tsx`) rendered `takeaway` in a single-line
+`<input>`, a leftover from before logbook #53 made it a real 2-4 sentence
+value — every other multi-sentence-capable field in the same file
+(`carousel_conversation`'s `question`, `single_quote`'s `quote`) already
+uses the `multiline` prop (a `<textarea>`), `carousel_closing` was the one
+case still missing it.
+
+**Fix 2:** added `multiline` to that one `Field` usage — same component,
+same pattern, no new styling invented. `pnpm exec tsc --noEmit`: clean.
+
+**Verified, max 2 real trials per the standing rule:** `wellness-sleep`
+(anchor: factory night-shift whistle) and `mindset-rest` (anchor: the
+invention of the weekend), neither used in any prior trial batch.
+
+- `wellness-sleep` — caption's actual ending: *"But the body is not a
+  factory whistle... It keeps asking for darkness, repetition, and a
+  gentler end to the day..."* → closing: *"A body is not a whistle on a
+  brick wall... It still asks for darkness, steadiness, and an ending it
+  can recognize."* Same image, same idea, genuinely reworded — clean.
+- `mindset-rest` — caption's actual ending: *"...It simply struck the
+  hour, and for a moment, the machines went quiet..."* → closing: *"...It
+  struck the hour while there was still life left in them..."* Mostly
+  reworded, but **"It struck the hour" is a near-verbatim 4-word lift**
+  from the caption's "It simply struck the hour" (missing only "simply") —
+  reported plainly, not glossed over, the same discipline logbook #44
+  already applied to a similar minor near-verbatim finding. Not a full-
+  sentence copy, but a real, partial overlap worth watching for on future
+  trials.
+
+Both trials: `validation_errors: []`, 2-4 sentences each (3 and 3), within
+the existing word range, no restatement of a body slide's own specific
+image, never phrased as a question. The bridge-line instruction (logbook
+#20, unchanged by this task) also fired cleanly on both, incidentally
+confirming it's still holding.
+
+**UI verification — a real render, not just code reading, despite not
+having a way to drive the real authenticated `/editor` page in this
+session:** `AuthGate` (`components/AuthGate.tsx`) requires a real Supabase
+session with no credentials available to this session to obtain one — the
+identical constraint logbook #13 already hit for the POC's own page.
+Followed that entry's own established precedent instead of skipping
+verification: built a faithful static HTML reproduction of the
+`carousel_closing` edit form using the real, verbatim CSS values from
+`lib/ui-styles.ts` (`cardStyle`/`labelStyle`/`inputStyle`) and the real
+41-word closing text from the `mindset-rest` trial above, then rendered it
+with a real headless Chromium (Playwright, already installed in this
+environment from a prior session per logbook #24) and took a real
+screenshot — not simulated. Confirmed visually and programmatically: the
+old single-line input clips the text mid-word ("...prove they v"); the new
+textarea wraps the full text across visible lines and is scrollable/
+resizable; the underlying value is byte-identical between both (227
+characters, unmodified) — nothing was ever actually truncated at the data
+level, only the old input's display was unreadable. Honestly noted, not
+glossed over: at the textarea's default `minHeight: 70`, the last line of
+a full 4-sentence closing sits just below the visible fold without
+scrolling or resizing — identical behavior to the already-proven `Quote`
+field at the same `minHeight`, not a new regression this fix introduced.
+
+**Not a blueprint deviation** — a content-quality and UI-staleness fix on
+an already-tracked, OPEN/EXPERIMENTAL feature (logbook #43-46, #53-54),
+not a new design decision.
+
+---
+
+## 56. Full aesthetic pass on every carousel template the direct-write port actually uses — airier leading, top-anchored layout, a cover swipe marker, and closing-specific weight/responsive sizing
+
+**Scope, decided explicitly, not guessed at silently:** "every carousel
+template" is read here as every template the carousel direct-write port
+(logbook #43-46) actually produces — `CarouselCover`, `CarouselBodyTeaching`,
+`CarouselClosing`, `ConversationSlide` — not `CarouselBody` (legacy's
+non-teaching fragment shape, never reached by direct-write) and not
+`single_image`'s `SingleQuote`/`SingleStat`, consistent with every task in
+this arc since #19 explicitly scoping to direct-write and leaving
+`single_image`/legacy-only shapes untouched. All four templates are shared
+render components with the legacy chain (same `template_id`, same React
+component), so these are pure rendering/typography changes with no content-
+generation logic touched — they apply to legacy-produced carousels too, by
+construction, not by a separate decision.
+
+**Changes, per template:**
+- **Every template:** line-height increased for airier reading (cover
+  headline 1→1.1, script_word 1.15→1.2, kicker/cover_body 1.35→1.4/1.5;
+  body-teaching's body 1.5→1.6; closing 1.3→1.4; conversation's question
+  1.3→1.4, cta 1.4→1.5, invite gained an explicit 1.2 where none existed
+  before). `CarouselBodyTeaching`, `CarouselClosing`, and `ConversationSlide`
+  changed from a vertically-centered `flex:1` wrapper to a top-anchored one
+  (`justifyContent: "flex-start"` + a fixed `marginTop: 56`, matching
+  `CarouselCover`'s own already-proven convention) — a centered block reads
+  as a small floating island with equal empty margins above and below that
+  shrinks or grows with word count; top-anchoring fixes the position readers
+  land on to be consistent regardless of length, with any slack now falling
+  only at the bottom. **A real, explicit deviation from blueprint.md Section
+  12's "center within that wrapper" convention for this template family** —
+  logged here, not silently reverted, same treatment as #32's masthead
+  simplification.
+- **Body-teaching also got a static font-size increase (36px → 44px)**, on
+  top of the layout/leading changes above — a real render at the template's
+  own 55-word ceiling still showed roughly half the frame empty at 36px, so
+  the top-anchor alone wasn't enough to satisfy "fills more of the available
+  space"; 44px is a fixed bump (not content-length-responsive, that
+  mechanism is reserved for closing specifically, per this task's own
+  scoping) and was re-verified not to overflow at the ceiling.
+- **Cover** gained a swipe marker between the text block and the hero image:
+  plain ASCII "Swipe >" text, small-caps styled to match the masthead/label
+  convention already used elsewhere. **A first attempt used a CSS
+  border-triangle (transparent top/bottom borders + a solid left border,
+  the standard browser technique for a zero-size triangle) and a real render
+  showed it rendering as a plain filled square instead of a triangle** —
+  Satori's border implementation doesn't replicate a browser's diagonal
+  border-miter clipping. Fixed by dropping the CSS shape entirely and using
+  plain ASCII text only, consistent with this project's own established
+  practice (logbook #39 round 7: an emoji/em-dash/middot/hedera/star glyph
+  all rendered as tofu in this project's bundled font subset, fixed the same
+  way, by falling back to plain ASCII).
+- **Closing (S5)** specifically: `fontWeight` reduced 700 → 600 (too heavy
+  at the original weight), and `fontSize` is now responsive to `takeaway`'s
+  own word count via a new `closingFontSize()` helper — a linear scale from
+  48px (near the 21-word tolerant floor) down to 36px (at the 61-word
+  tolerant ceiling), computed in JS since Satori has no `clamp()`/`calc()`
+  support to lean on.
+
+**Real render checks at both ends of each template's word range, not just
+one example, per this task's explicit ask** — using exact, programmatically
+verified word counts (a `make_text()` helper that glues periods/commas onto
+existing tokens rather than inserting new ones, so `len(text.split())`
+always matches the target count exactly, asserted, not assumed) rather than
+hand-counted strings:
+
+| Template | Floor render | Ceiling render |
+|---|---|---|
+| `carousel_cover` | 18 words (4 headline + 14 body) — clean | 50 words (6 headline + 44 body, 4-line headline) — **hero image clipped at the bottom edge**, a real overflow found by this exact test |
+| `carousel_body_teaching` | 31 words — clean, though still leaves real trailing space below (see below) | 55 words — clean, no overflow at the new 44px size |
+| `carousel_closing` | 21 words (renders at 48px) — clean | 61 words (renders at 36px) — clean, comfortably fits 6 lines |
+| `carousel_conversation` | 13 words — clean | 28 words — clean |
+
+**The one real overflow found, investigated, and characterized rather than
+left as an unqualified failure:** the cover-ceiling case above only clipped
+the hero image when the headline itself wrapped to 4 lines (an unusually
+long 6-word headline). A follow-up render at the identical combined 50-word
+ceiling, but with a headline length matching what every real trial in this
+document and #19-22 has actually produced (3-5 words, 1-2 lines), rendered
+cleanly with the full hero image visible. **Not fixed** — narrow edge case,
+real but not reproducible with realistic model output, flagged rather than
+silently ignored or overclaimed as fixed.
+
+**2 real, unmocked `/generate`-shaped trials** (`career-imposter-syndrome`,
+anchor: blind auditions in orchestras; `wellness-burnout`, anchor: canary in
+a coal mine — the latter a **repeat of the already-tracked cross-topic
+anchor-convergence gap**, deviations table row 43-46, recurring again
+unprompted) — both `validation_errors: []`, both rendered cleanly across
+every slide (cover, all 3 body, closing, conversation) at the new settings.
+Punctuation confirmed rendering cleanly on real content, not just
+synthetics: apostrophes ("musician's," "miner's"), a semicolon, commas, and
+question marks all rendered correctly with no tofu or spacing artifacts —
+including the `accent_phrase` punctuation-glue fix from #19, re-confirmed
+still holding under the new 44px size.
+
+**Not fixed, honestly noted:** even after the layout and font-size changes,
+a body-teaching slide at the true floor of its word range (31 words) still
+leaves visible empty space below the text — an inherent consequence of a
+fixed 1080×1350 canvas paired with a real word-count range that has a
+genuine floor, not a bug a static font/leading change can fully eliminate
+without either responsive sizing (deliberately scoped to closing only) or
+a canvas/aspect-ratio change (out of scope). Reported as a real, bounded
+tradeoff, not glossed over as fully solved.
+
+Full backend suite 143/143 (no backend code touched — only the two
+reference scripts' topic lists). `pnpm exec tsc --noEmit`: clean throughout,
+including after the swipe-marker fix.
+
+**Not a blueprint deviation beyond the explicit one named above** — the
+layout/centering change for body-teaching/closing/conversation is the one
+real, named departure from blueprint.md Section 12; everything else
+(leading, font-size, weight, the swipe marker) is typography/decoration
+`implementation-guide.md` never locked a specific value for.
+
+---
+
+## 57. Swipe-editor gained a real edit form for `carousel_body_teaching` slides — a pre-existing gap flagged twice (logbook #19, #53) and never fixed until now
+
+**Symptom:** `SlideEditForm` (`editor/page.tsx`) has a `switch` on
+`slide.template_id` with a case for every template except
+`carousel_body_teaching` — the 3 body slides of every carousel (both
+legacy- and direct-write-produced) had no edit form at all in the
+swipe-editor. Not a new bug: logbook #19 first noticed the switch was
+missing this case while adding `accent_phrase`, and #53 re-noticed it while
+fixing the closing slide's edit form, both times flagging it as a real,
+pre-existing gap out of scope for the task at hand rather than silently
+fixing it inline.
+
+**Fix:** added the missing case, matching the exact `Field`/`cardStyle`
+pattern every other case already uses. Three fields: `Heading` (legacy-only,
+typically empty on the now-default direct-write path — shown
+unconditionally, same reasoning as `cover_body`'s field on the cover's own
+form), `Body` (multiline, since body-teaching's real content is 1-2 full
+sentences, not a short line), and `Accent phrase` (single-line, since it's
+meant to be a short substring, not a paragraph). Editing `body` freely can
+desync it from `accent_phrase` (no longer a real substring of the edited
+text) — accepted, not specially guarded against: `CarouselBodyTeaching.tsx`
+already falls back to a plain, unsplit body render whenever `accent_phrase`
+isn't found in `body` (task "#19"), so a desync degrades gracefully to
+"no highlight" rather than breaking the render or losing content.
+
+**Verified with a real functional check, not a visual render pass, per
+this task's explicit ask.** `AuthGate` blocks driving the real `/editor`
+page with actual credentials in this session (the same constraint hit in
+#22/#55) — rather than falling back to a static reproduction again (right
+for a pure-CSS concern, not for "does an edit actually save and reflect"),
+used a different, still-legitimate technique suited to a *functional*
+check: a structurally-valid but cryptographically-unverified fake Supabase
+session injected into `localStorage` (`sb-<project-ref>-auth-token`,
+Playwright's `addInitScript`, so it's present before the page's own JS
+runs). `AuthGate` only calls `supabase.auth.getSession()`, which resolves
+from local storage without a network round-trip when the session isn't
+expired — no real credentials were used or bypassed server-side, and
+nothing in the editor flow being exercised here (no regenerate/reshuffle
+triggered) makes any authenticated Supabase network call that a fake token
+could affect. A real `GenerateResponse` from an actual prior `/generate`
+trial (`wellness-burnout`, task "#23") was seeded into `sessionStorage` the
+same way `session-store.ts` itself writes it.
+
+With that, a real headless Chromium (Playwright, already installed from
+prior sessions) actually loaded `/editor`, confirmed it was **not**
+redirected to `/login` (the fake session was accepted), navigated to the
+first body-teaching slide via its real dot control, and confirmed
+end-to-end, against the real rendered DOM, not assumptions:
+
+- The edit form appears with `Heading`/`Body`/`Accent phrase` fields.
+- Typing a marker into `Body` and reading it back from the *live preview*
+  (the actual `SlideRenderer`/`CarouselBodyTeaching` component, the same
+  one `/api/render` uses) confirms it: the edit reached real React state
+  and re-rendered, not just an isolated form-field echo.
+- Editing `Accent phrase` to a different real substring of the body
+  ("small enough," verified present in this slide's actual text) and
+  querying the real rendered DOM's computed CSS color confirmed the
+  highlight genuinely moved: the old phrase ("poisoned air") lost the
+  accent color, the new one gained it — not just that new text appeared
+  somewhere on the page, which would be true regardless of highlighting.
+- Both fields still held their edited values after the re-render (a real
+  save into state, not a UI glitch that silently reset).
+
+**A real bug in the test itself, not the app, caught and fixed along the
+way:** the first version of this check used `.locator("input").last()` to
+find the Accent phrase field, which silently grabbed the page's unrelated
+Hashtags input instead (`"#burnout #wgs"`) — the page has multiple
+`<input>`/`<textarea>` elements (Heading, Accent phrase, Caption,
+Hashtags), and position-based selection picked the wrong one without
+erroring. Fixed by scoping the locator to the "Edit this slide" section
+specifically and indexing within it by the known field order, after
+`getByLabel()` (the more idiomatic fix attempted first) timed out
+unresolved against this component's label-wrapping markup.
+
+**A second, more important false alarm caught and correctly not treated as
+a bug:** an early version of this check set `accent_phrase` to an invented
+string ("ACCENT-EDITED") not actually present in `body`, and then
+(correctly) found it never appeared anywhere in the rendered preview.
+Investigated before assuming a bug: this is exactly
+`CarouselBodyTeaching.tsx`'s own documented fallback behavior from task
+"#19" — an `accent_phrase` that isn't a real substring of `body` renders
+as plain, unhighlighted text, not an error and not a silent no-op. The
+check was rewritten to edit `accent_phrase` to a genuinely findable
+substring instead, which is what actually exercises the edit-and-reflect
+behavior this task asked to confirm.
+
+Full backend suite unaffected (143/143, no backend code touched).
+`pnpm exec tsc --noEmit`: clean.
+
+**Not a blueprint deviation** — closes a documented UI gap on an
+already-tracked feature; no design decision changed.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -3872,3 +4168,4 @@ new design decision.
 | 40 | Production text generation (`LLMProvider`, all callers) defaults to `gpt-5.6-luna`/`gpt-5.5` (OpenAI) instead of the locked Claude Haiku 4.5/Sonnet 5 | Anthropic production credits ran out entirely, plus real A/B evidence gpt-5.5 matched/beat Sonnet 5 on anchor authenticity and voice discipline; Claude path fully preserved and reversible via `LLM_PROVIDER=anthropic`, no redeploy needed |
 | 43-46 | **OPEN/EXPERIMENTAL** — carousel direct-write port (single-call writer, no critique/refine, free anchor pick guided by category+seed_angles) now wired into `routes/generate.py` as the default (`CAROUSEL_WRITER=direct_write`) for carousel, replacing the legacy chain for that call; its hero image generation runs **sequentially after** the text call, not in parallel — a direct deviation from blueprint Section 15's "text and image generation run as independent parallel lanes off the same brief" design, for carousel direct-write specifically (the legacy chain and `single_image` are both unaffected and still run their lanes in parallel as originally specced). Cross-topic anchor-convergence (independent generations landing on the same anchor, e.g. `career-burnout`/`wellness-burnout` both choosing "canary in a coal mine") is a real, still-open, still-unfixed gap, reconfirmed in this now-production-wired code path, not just the isolated POC it was first found in (`backend/app/poc/FINDINGS.md` #1). Both the sequential-image tradeoff and the anchor-convergence gap now also apply to paste-link's own direct-write entry point (logbook #51), which reuses the same single-call, sequential-image design — not a second, separate deviation, the same one now confirmed at a second entry point | Real testing found direct-write's single call outperformed 8 rounds of patching the legacy checklist prompt (`docs/direct-write-poc.md` Section 5); sequential image generation is a structural consequence of the single-call design, not a choice — mood/visual_subject aren't known until the one writer call returns, unlike the legacy chain's cheap-tier pre-sample that knows them before the strong-tier draft even starts; reversible via `CAROUSEL_WRITER=legacy`, not a hard cutover; anchor-convergence has no fix yet on either path (POC or production-wired) |
 | 53 | **OPEN/EXPERIMENTAL** — carousel direct-write's cover is now `headline`+`cover_body` (was `headline_word`/`script_word`/`kicker`), body slides drop `heading` in favor of an in-line `accent_phrase` (an exact substring of that slide's `body`), and `closing_takeaway` is a real 2-4 sentence build (was a one-line echo of the caption's opening) instead of legacy's short-takeaway shape. `CoverSlide`/`BodyTeachingSlide` (shared render models with legacy) gained these as new optional, defaulted fields rather than having anything renamed/removed out from under legacy, which still uses the old shapes unchanged; `validator.py` gained a `carousel_writer`-gated word-range override (`_DIRECT_WRITE_WORD_RANGE_OVERRIDES`) so legacy's own, shorter cover/closing ranges are untouched. Bridge-line instruction (cover_body should bridge to the reader's life only when the anchor illustrates a separate theme) generated for the first time on 5 real trials: fired clearly on 2, correctly stayed silent on 1 (an anchor-IS-the-subject topic), soft/ambiguous on 2 — real but not yet reliably 5-for-5. Cross-topic anchor convergence (row 43-46) recurred again, unprompted, on 2 of the 5 trial topics | Explicit request to replace (not layer onto) the cover/body/closing instructions, since layering was exactly the checklist-accumulation failure mode direct-write was built to escape (see logbook #39's own diagnosis, `docs/direct-write-poc.md` Section 2); real render verification (not just word counts) also surfaced and fixed a genuine Satori rendering bug (a stray gap before punctuation glued directly onto `accent_phrase` with no source space) |
+| 56 | `CarouselBodyTeaching`, `CarouselClosing`, and `ConversationSlide` changed from vertically-centered `flex:1` content to top-anchored (`flex-start` + fixed `marginTop`), matching `CarouselCover`'s convention | Centered content read as a small floating island with equal empty margins above/below that shrank or grew with word count; top-anchoring fixes the reading position regardless of length. Since these are shared render components, this also changes legacy-produced carousels' appearance, not just direct-write's |

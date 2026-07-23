@@ -1294,15 +1294,35 @@ def _carousel_direct_closing_instruction() -> str:
     # see rule 7" constraint -- rule 7 no longer governs this field at all (see
     # the edit to _CAROUSEL_DIRECT_RULES_3_TO_12 above). closing_takeaway is a
     # real 2-4 sentence build now, not a one-line echo of the opening.
+    #
+    # Task "#22": real testing kept showing the caption's own actual ending
+    # read stronger and more concrete than a closing_takeaway written as a
+    # separate, from-scratch field -- the exact problem the body slides
+    # already solve by deriving from the caption instead of inventing new
+    # content (_carousel_direct_body_distillation_instruction above).
+    # closing_takeaway now follows that identical pattern: it IS the
+    # caption's own actual final beat, closely adapted for this slide, not a
+    # new conclusion invented separately from what the caption already ends
+    # on. "New feeling the piece hasn't already stated outright" is dropped
+    # entirely -- it directly contradicted deriving from what the caption
+    # has, in fact, already stated as its own ending.
     lo, hi = _tolerant_word_range(*_CAROUSEL_DIRECT_CLOSING_WORD_RANGE)
     return (
-        f"closing_takeaway: a real closing, {lo}-{hi} words across 2 to 4 full "
-        "sentences — not one clipped line. Its job is to leave the reader with "
-        "a new feeling, one the piece has earned but hasn't already stated "
-        "outright — never a restatement of a body slide's image or detail, "
-        "and never phrased as a question. Write it in plain, direct language; "
-        "this is the moment for the piece's plainest sentences, not a place "
-        "for wordplay or a clever turn for its own sake."
+        f"closing_takeaway ({lo}-{hi} words, 2 to 4 full sentences — not one "
+        "clipped line): this is not a new piece of writing. It is the "
+        "caption's own actual ending — the same final beat, the same image, "
+        "the same idea the caption itself closes on — closely adapted for "
+        "this slide: retold in fresh sentence-level wording for its own "
+        "screen, the same reworded-not-copied pattern the body slides above "
+        "already use for their own beats. A reader may see both the caption "
+        "and this slide on the same post, so it must never reuse the "
+        "caption's own closing sentence almost word for word. It must also "
+        "never reuse a body slide's own specific image or detail instead — "
+        "if the caption's actual ending happens to overlap with a body "
+        "slide's beat, adapt the ending's own wording, don't borrow the body "
+        "slide's. Write it in plain, direct language; this is the moment for "
+        "the piece's plainest sentences, not a place for wordplay or a "
+        "clever turn for its own sake. Never phrase it as a question."
     )
 
 

@@ -25,6 +25,12 @@ interface ConversationSlideProps extends CarouselConversationContent {
  * body-copy weight, handle as a tiny letter-spaced uppercase footnote) —
  * relocated from CarouselClosing, which was rendering them a slide too early,
  * a leftover from before this slide existed.
+ *
+ * Task "#23": top-anchored (flex-start + a fixed marginTop) instead of
+ * vertically centered, and airier line-heights on question/cta -- same
+ * reasoning and same deviation from blueprint.md Section 12's "center within
+ * that wrapper" convention as CarouselClosing/CarouselBodyTeaching's identical
+ * change, logged there, applying here too for the same template family.
  */
 export default function ConversationSlide({
   masthead,
@@ -44,7 +50,8 @@ export default function ConversationSlide({
           display: "flex",
           flex: 1,
           flexDirection: "column",
-          justifyContent: "center",
+          justifyContent: "flex-start",
+          marginTop: 56,
           gap: 24,
         }}
       >
@@ -64,7 +71,7 @@ export default function ConversationSlide({
             fontFamily: tokens.font_body,
             fontWeight: 700,
             fontSize: 52,
-            lineHeight: 1.3,
+            lineHeight: 1.4,
             color: tokens.text_color,
           }}
         >
@@ -74,6 +81,7 @@ export default function ConversationSlide({
           style={{
             fontFamily: tokens.font_script,
             fontSize: 40,
+            lineHeight: 1.2,
             color: tokens.accent,
           }}
         >
@@ -84,7 +92,7 @@ export default function ConversationSlide({
             fontFamily: tokens.font_body,
             fontWeight: 400,
             fontSize: 24,
-            lineHeight: 1.4,
+            lineHeight: 1.5,
             color: tokens.text_color,
           }}
         >

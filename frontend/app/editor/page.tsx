@@ -302,11 +302,44 @@ function SlideEditForm({
           />
         </section>
       );
-    case "carousel_closing":
+    case "carousel_body_teaching":
+      // Task "#24": this case was missing entirely -- flagged as a known,
+      // pre-existing gap in logbook #53/#19 rather than fixed there, since
+      // it predated both those tasks and fixing it needed its own design
+      // pass (what should heading/accent_phrase do on edit). heading
+      // (legacy-only, typically empty on the now-default direct-write path)
+      // shown unconditionally for the same reason cover_body is above --
+      // legacy leaves accent_phrase blank, direct-write leaves heading
+      // blank, and each field simply stays empty on whichever path doesn't
+      // use it. Editing body freely can desync it from accent_phrase (no
+      // longer a real substring of the edited text) -- accepted here, same
+      // as editing any other slide's text can desync it from validator
+      // checks; CarouselBodyTeaching.tsx already falls back to a plain,
+      // unsplit body render whenever accent_phrase isn't found (task "#19"),
+      // so a desync degrades gracefully rather than breaking the render.
       return (
         <section style={cardStyle}>
           <div style={labelStyle}>Edit this slide</div>
-          <Field label="Takeaway" value={slide.takeaway} onChange={(v) => onChange({ takeaway: v })} />
+          <Field label="Heading" value={slide.heading} onChange={(v) => onChange({ heading: v })} />
+          <Field label="Body" value={slide.body} onChange={(v) => onChange({ body: v })} multiline />
+          <Field
+            label="Accent phrase"
+            value={slide.accent_phrase ?? ""}
+            onChange={(v) => onChange({ accent_phrase: v })}
+          />
+        </section>
+      );
+    case "carousel_closing":
+      // Task "#22": takeaway is a real 2-4 sentence build now (logbook #53),
+      // not the one-line echo this single-line input was originally built
+      // for -- the full value was still there, but an unwrapped single-line
+      // input made a multi-sentence value unreadable/hard to edit without
+      // horizontal scrolling. Same multiline textarea the Question/Quote
+      // fields above already use.
+      return (
+        <section style={cardStyle}>
+          <div style={labelStyle}>Edit this slide</div>
+          <Field label="Takeaway" value={slide.takeaway} onChange={(v) => onChange({ takeaway: v })} multiline />
         </section>
       );
     case "carousel_conversation":

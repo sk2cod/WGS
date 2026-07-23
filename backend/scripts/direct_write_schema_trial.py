@@ -29,8 +29,8 @@ from app.taxonomy.loader import get_topics_by_id
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
 TOPIC_IDS = [
-    "mindset-perfectionism",
-    "career-pay-scale",
+    "career-imposter-syndrome",
+    "wellness-burnout",
 ]
 
 

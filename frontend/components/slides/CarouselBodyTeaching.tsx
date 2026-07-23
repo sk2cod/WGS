@@ -28,8 +28,12 @@ export default function CarouselBodyTeaching({
   const bodyTextStyle = {
     fontFamily: tokens.font_body,
     fontWeight: 500,
-    fontSize: 36,
-    lineHeight: 1.5,
+    fontSize: 44, // task "#23": up from 36 -- real render showed even the 55-word
+    // ceiling case left roughly half the frame empty at 36px; a real, fixed size
+    // bump (not per-length, that's reserved for Closing) makes any amount of real
+    // content within the template's actual word range read as more substantial,
+    // on top of the top-anchor layout change and the line-height increase below.
+    lineHeight: 1.6, // airier reading
     color: tokens.text_color,
   };
 
@@ -68,12 +72,20 @@ export default function CarouselBodyTeaching({
     <SlideFrame backgroundColor={tokens.background_color}>
       <Masthead masthead={masthead} tokens={tokens} />
 
+      {/* Task "#23": top-anchored (flex-start + a fixed marginTop, same convention
+          Cover already uses) instead of vertically centered -- a centered block
+          reads as a small floating island surrounded by equal empty margins top
+          and bottom, and that "island" shrinks or grows with word count instead of
+          the frame consistently filling from a fixed reading position. A real
+          deviation from blueprint.md Section 12's own "center within that wrapper"
+          convention for this template family -- logged, not silently reverted. */}
       <div
         style={{
           display: "flex",
           flex: 1,
           flexDirection: "column",
-          justifyContent: "center",
+          justifyContent: "flex-start",
+          marginTop: 56,
           gap: 24,
         }}
       >
@@ -82,7 +94,7 @@ export default function CarouselBodyTeaching({
             style={{
               fontFamily: tokens.font_heading,
               fontSize: 40,
-              lineHeight: 1.2,
+              lineHeight: 1.25,
               color: tokens.accent,
               textTransform: "uppercase",
             }}
