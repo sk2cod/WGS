@@ -190,13 +190,18 @@ def _finalize_generation(
     category: str,
     masthead: str,
     anchor: str = "",
+    carousel_writer: str = "legacy",
 ) -> GenerateResponse:
     """Shared tail for both the legacy chain and the carousel direct-write
     port (logbook #43-46): validate, write the memory record, build the
     response. `anchor` (logbook #43) is empty for every path except carousel
     direct-write, which has a real one to record -- single_image and the
-    legacy carousel chain have no equivalent concept."""
-    validation = validate_post(brief, brand_kit, post, memory, fingerprint)
+    legacy carousel chain have no equivalent concept. `carousel_writer` (task
+    "#19") is threaded to validate_post() so the cover/closing word-range
+    check applies the right range for whichever writer actually produced
+    `post` -- defaults to "legacy" so every non-direct-write caller is
+    unaffected."""
+    validation = validate_post(brief, brand_kit, post, memory, fingerprint, carousel_writer=carousel_writer)
 
     record = MemoryRecord(
         id=str(uuid.uuid4()),
@@ -328,6 +333,7 @@ async def _generate_carousel_direct(
         category=topic.primary_category,
         masthead=brief_result.masthead,
         anchor=anchor,
+        carousel_writer="direct_write",
     )
 
 
@@ -400,6 +406,7 @@ async def _generate_paste_link_direct(
         category=category,
         masthead=masthead,
         anchor=anchor,
+        carousel_writer="direct_write",
     )
 
 

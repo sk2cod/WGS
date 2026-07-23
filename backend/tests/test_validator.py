@@ -6,7 +6,7 @@ from app.engine.validator import validate_post
 from app.models.brief import ContentBrief, Source
 from app.models.enums import Approach, Format
 from app.models.memory import MemoryRecord
-from app.models.post import BodySlide, GeneratedPost, StatSlide
+from app.models.post import BodySlide, CoverSlide, GeneratedPost, StatSlide
 from app.taxonomy.loader import get_topics_by_id
 from app.taxonomy.wgs_brand_kit import WGS_BRAND_KIT
 
@@ -181,6 +181,65 @@ def test_validate_post_flags_slide_above_its_template_word_ceiling():
     result = validate_post(_brief(), WGS_BRAND_KIT, post, [], "fp-8")
     assert not result.passed
     assert any("exceeds the 22-word ceiling" in e for e in result.errors)
+
+
+# _post()'s default filler (17 words combined) satisfies legacy's ranges (the
+# smallest of which floors at 9-10) but not direct-write's wider cover/closing
+# floors (18 and 21 respectively) -- these two fillers isolate "the slide
+# under test" from "the other slide direct-write also widens", so a test on
+# one doesn't spuriously fail on the other's now-too-short default filler.
+_DIRECT_WRITE_COVER_FILLER = " ".join(["word"] * 20)  # clears the (18, 50) floor
+_DIRECT_WRITE_CLOSING_FILLER = " ".join(["word"] * 22)  # clears the (21, 61) floor
+
+
+def test_validate_post_direct_write_closing_allows_a_real_2_to_4_sentence_build():
+    """Task '#19': carousel direct-write's closing is a real 2-4 sentence build,
+    not legacy's one-line takeaway -- a 30-word closing fails against legacy's
+    ceiling (previous test, unchanged) but must pass once carousel_writer=
+    "direct_write" tells validate_post to use the wider, direct-write-only
+    range instead (_CAROUSEL_DIRECT_CLOSING_WORD_RANGE, tolerant ceiling 61)."""
+    post = _post()
+    post.slides[0] = BodySlide(statement_pre=_DIRECT_WRITE_COVER_FILLER, statement_script="", statement_post="")
+    thirty_word_closing = " ".join(["word"] * 30)
+    post.slides[4] = BodySlide(statement_pre=thirty_word_closing, statement_script="", statement_post="")
+    result = validate_post(_brief(), WGS_BRAND_KIT, post, [], "fp-8b", carousel_writer="direct_write")
+    assert result.passed
+    assert result.errors == []
+
+
+def test_validate_post_direct_write_closing_still_flags_genuine_overflow():
+    """The wider direct-write range still has a real ceiling -- it isn't
+    unlimited just because it's wider than legacy's."""
+    post = _post()
+    post.slides[0] = BodySlide(statement_pre=_DIRECT_WRITE_COVER_FILLER, statement_script="", statement_post="")
+    way_too_long_closing = " ".join(["word"] * 80)
+    post.slides[4] = BodySlide(statement_pre=way_too_long_closing, statement_script="", statement_post="")
+    result = validate_post(_brief(), WGS_BRAND_KIT, post, [], "fp-8c", carousel_writer="direct_write")
+    assert not result.passed
+    assert any("exceeds the" in e and "ceiling" in e for e in result.errors)
+
+
+def test_validate_post_direct_write_cover_gets_its_own_wider_range():
+    """Task '#19': carousel_cover has no entry in _WORD_RANGE_FOR_ROLE at all
+    (legacy's one-word headline + one-line kicker never needed one), so it
+    falls back to the flat max_words_per_slide cap (tolerant ceiling 33) by
+    default. Direct-write's real cover_body paragraph needs more room than
+    that -- a 40-word cover must pass under carousel_writer="direct_write"
+    (tolerant ceiling 50) but would fail the old flat cap if it applied."""
+    brief = _brief()
+    cover_text = " ".join(["word"] * 40)
+    post = _post(brief=brief)
+    post.slides[0] = CoverSlide(
+        headline_word=cover_text, script_word="", kicker="", cover_body=""
+    )
+    post.slides[4] = BodySlide(statement_pre=_DIRECT_WRITE_CLOSING_FILLER, statement_script="", statement_post="")
+    result = validate_post(brief, WGS_BRAND_KIT, post, [], "fp-8d", carousel_writer="direct_write")
+    assert result.passed
+    assert result.errors == []
+
+    legacy_result = validate_post(brief, WGS_BRAND_KIT, post, [], "fp-8e", carousel_writer="legacy")
+    assert not legacy_result.passed
+    assert any("exceeds max_words_per_slide" in e for e in legacy_result.errors)
 
 
 def _single_stat_post(number="42%", supporting_line=None) -> GeneratedPost:

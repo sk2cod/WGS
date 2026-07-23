@@ -267,9 +267,18 @@ function SlideEditForm({
       return (
         <section style={cardStyle}>
           <div style={labelStyle}>Edit this slide</div>
-          <Field label="Headline word" value={slide.headline_word} onChange={(v) => onChange({ headline_word: v })} />
+          <Field label="Headline" value={slide.headline_word} onChange={(v) => onChange({ headline_word: v })} />
           <Field label="Script phrase" value={slide.script_word} onChange={(v) => onChange({ script_word: v })} />
           <Field label="Kicker" value={slide.kicker} onChange={(v) => onChange({ kicker: v })} />
+          {/* cover_body: the carousel direct-write port's field (task "#19") --
+              only ever populated on that path, so shown unconditionally is fine
+              (legacy leaves it empty and this field simply stays blank). */}
+          <Field
+            label="Cover body"
+            value={slide.cover_body ?? ""}
+            onChange={(v) => onChange({ cover_body: v })}
+            multiline
+          />
         </section>
       );
     case "carousel_body":

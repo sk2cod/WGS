@@ -3593,6 +3593,268 @@ unaddressed mild-undershoot tendency"), not a new design decision.
 
 ---
 
+## 53. OPEN, EXPERIMENTAL — carousel direct-write's cover/body/closing prompt and schema rewritten (replaced, not appended), plus a real render bug found and fixed along the way
+
+**What this is:** a deliberate rewrite of `draft_carousel_direct()`'s
+cover/body/closing instructions and JSON schema — explicitly requested as a
+*replacement*, not a layering of new rules on top of the old ones, since the
+whole reason the carousel direct-write port (logbook #43-46) exists is to
+avoid the checklist-accumulation problem that round-8 patching of the legacy
+prompt (logbook #39) ran into. Every changed field/instruction below was
+read in full first and then replaced outright:
+
+- **Cover** — `headline_word`/`script_word`/`kicker` (three fields) replaced
+  with exactly two: `headline` (a short *phrase*, not one isolated word —
+  still lands in the same 96px slot the old one-word headline used) and
+  `cover_body` (1-2 real sentences). `cover_body`'s instruction requires
+  spelling out the category of any real named person/thing referenced
+  (never assume familiarity), building curiosity by withholding *meaning*
+  rather than basic facts, and — only when the anchor illustrates a
+  separate real-life theme rather than being the subject in its own right —
+  an explicit bridge sentence to the reader's own life.
+- **Body** — the `heading` field is dropped entirely (not just left empty by
+  convention; removed from the instruction and the JSON schema the model is
+  shown). Each of the 3 body slides gains `accent_phrase`: an exact,
+  verbatim substring of that slide's own `body` text, never more than one
+  per slide, meant to be rendered emphasized in-line rather than as a
+  separate label line. The instruction now also explicitly asks for
+  flowing, full-sentence editorial prose (not clipped statements) and
+  restates the beat-distinctness requirement at the body-slide level, not
+  just the caption level.
+- **Closing** — the old "one declarative line ... see rule 7" constraint
+  (rule 7 required `closing_takeaway` to echo the caption's opening, at the
+  level of one line) is gone. `closing_takeaway` is now a real 2-4 sentence
+  build, explicitly *not* required to echo the opening, whose job is a new
+  feeling for the reader — never a restatement of a body slide's image —
+  in plain, direct language, with no wordplay for its own sake. Rule 7
+  itself was edited down to only govern the caption's own ending, with an
+  explicit parenthetical noting `closing_takeaway` now has its own separate
+  instruction so the two don't silently stay coupled in a reader's mind.
+
+**Schema/model changes, and why nothing was silently overloaded onto shared
+state.** `CoverSlide`/`BodyTeachingSlide` (`app/models/post.py`) are shared
+render components with the **legacy** chain (`generator.py`'s
+`draft_post`/`critique_post`/`refine_post`), which still asks the model for
+the old three cover fields and the old `heading`+`body` shape — confirmed by
+reading `_build_slide()`, `_ROLE_FIELDS_EXAMPLE`, and `_brief_system_prompt`
+before changing anything. Renaming or removing those fields outright would
+have broken legacy's own still-live generation path (reachable via
+`CAROUSEL_WRITER=legacy` and via any preselected-angle request, logbook #46).
+Instead: `cover_body` and `accent_phrase` were added as new, optional
+(`= ""`-defaulted) fields on the existing shared models — legacy's own raw
+dict never supplies them, so they stay empty for every legacy-generated
+slide; `_parse_carousel_direct_response` (the direct-write-only parser)
+hardcodes `script_word`/`kicker`/`heading` to `""` on its own path rather
+than the model requiring them to always be non-empty. Same reasoning on the
+frontend: `CarouselCoverContent`/`CarouselBodyTeachingContent`
+(`lib/types.ts`) gained the same two optional fields; `CarouselCover.tsx`
+now renders `script_word`/`kicker`/`cover_body` conditionally (each only
+when non-empty), which also fixed a latent issue the old code would have
+hit the moment any of those three went empty: an unconditionally-rendered
+empty `<span>` at a fixed `fontSize`/`lineHeight` still reserves that
+line's vertical space, which would have left a visible gap where
+`script_word`/`kicker` used to be for every direct-write cover.
+
+**Word-range validation needed the same shared-vs-path-specific treatment.**
+`validator.py`'s `_check_slide_word_range` keys its per-template floor/
+ceiling purely off `role` (`carousel_cover`, `carousel_closing`), with no
+concept of which writer produced the post — so a `closing_takeaway` sized
+for a real 2-4 sentence build would have failed legacy's existing
+`carousel_closing` range (10-20 words, tolerant 9-22) had that range simply
+been widened in place, and conversely a genuinely short legacy takeaway
+would start false-flagging as "too short" against a range built for
+direct-write's longer prose. Fixed by adding `carousel_writer` as an
+explicit, defaulted (`"legacy"`) parameter threaded through
+`validate_post()` → `_check_format()` → `_check_slide_word_range()` →
+a new `_range_for_role()` helper, which only consults the new
+`_DIRECT_WRITE_WORD_RANGE_OVERRIDES` dict (`_CAROUSEL_DIRECT_COVER_WORD_RANGE
+= (20, 45)`, `_CAROUSEL_DIRECT_CLOSING_WORD_RANGE = (24, 55)`, both with the
+same 10%-tolerance treatment every other range already gets) when
+`carousel_writer == "direct_write"`. `routes/generate.py`'s
+`_finalize_generation()` gained the same defaulted parameter, threaded from
+its two direct-write call sites (`_generate_carousel_direct`,
+`_generate_paste_link_direct`) as `"direct_write"`; the legacy call site is
+untouched and stays on the default. `carousel_cover` had no entry in
+`_WORD_RANGE_FOR_ROLE` at all before this (legacy's one-word headline never
+needed one, so it fell back to the flat `max_words_per_slide` cap) — it now
+gets a real range, but only on the direct-write path.
+
+**A real render bug found (not just theorized) during verification, and
+fixed:** `CarouselBodyTeaching.tsx`'s `accent_phrase` highlight uses the same
+word-by-word `flexWrap` technique `CarouselBody.tsx` already uses for its own
+single emphasized phrase (necessary because Satori's flexbox-only layout
+can't wrap text within a single non-word flex item — splitting into
+per-word spans is what makes the paragraph wrap correctly at all). That
+technique puts a fixed `columnGap` between every adjacent span, which is
+only correct where the source text actually had a space. A real render
+surfaced the bug directly: "...far less convenient ." and "...cold water
+touch her face ." both rendered with a stray visible gap before the
+trailing period, because the accent phrase's closing punctuation was glued
+directly onto the source text with no space, but `columnGap` inserted one
+anyway. **Fixed** by detecting punctuation glued directly onto either side
+of the accent phrase (no space in the source) and folding it into the
+accent span itself, so it shares that span's own flex item and gets no
+`columnGap` before it, instead of becoming an orphaned same-color flex
+sibling. Re-rendered both original repro cases plus 4 more body slides
+across 3 more topics (including a mid-sentence comma case, "dressed as
+reliability," followed immediately by more text) after the fix — all clean,
+no stray gaps, in every case checked.
+
+**Verified, in order:**
+- Full backend suite: **143/143** (137 existing + 6 new — 3 in
+  `test_validator.py` covering the writer-aware cover/closing range
+  behavior including that the wider range still has a real ceiling, 3 in
+  `test_generator.py` covering the new `_parse_carousel_direct_response`
+  field mapping, including the case where `accent_phrase` genuinely isn't
+  found in `body` — a real possibility, checked rather than assumed away).
+- `pnpm exec tsc --noEmit`: clean, both before and after the render-bug fix.
+- **5 real, unmocked `/generate`-shaped trials** (`draft_carousel_direct`,
+  real `gpt-5.5` calls, not scripted responses) across
+  `mindset-self-doubt`, `career-boundaries`, `wellness-stress-regulation`
+  (citation-required), `inspiring-women-who-changed-history`
+  (citation-required), and `relationships-invisible-labor`
+  (citation-required) — `validation_errors: []` on every single trial.
+  `headline` was a genuine multi-word phrase in all 5 (4-5 words each, not
+  one word), `accent_phrase` was found as an exact substring of its own
+  slide's `body` in all 15 body slides checked, and every `closing_takeaway`
+  landed at exactly 3 sentences, in range, with no literal question and no
+  restatement of a body slide's specific image.
+- **The bridge-line instruction, generated for the first time (previously
+  only reasoned through):** fired clearly in 2 of 5 trials
+  (`mindset-self-doubt`: "The room did not know how to receive her mind.";
+  `wellness-stress-regulation`: "It has something quiet to say about the
+  body at work."), correctly did **not** fire on the one topic where the
+  anchor genuinely IS the subject rather than illustrating a separate theme
+  (`inspiring-women-who-changed-history` — Hedy Lamarr's own cover_body
+  stayed entirely inside her own story, no bridge sentence, exactly as
+  instructed), and was soft/ambiguous on the remaining 2
+  (`career-boundaries`, `relationships-invisible-labor` — both cover_body
+  paragraphs stayed curiosity-building but didn't include an unambiguous
+  reader-directed sentence, even though their body slides do make the
+  connection explicit a slide or two later). Reported plainly rather than
+  rounded up: real, directionally working, not yet reliable 5-for-5.
+- **Real Satori renders**, not just word counts: 5 real covers (checking the
+  96px headline slot, previously sized for one word, against a genuine
+  multi-word phrase) and 5 real closings (checking the 48px slot, previously
+  sized for a short line, against a genuine 2-4 sentence build) rendered via
+  the local `/api/render` route with real generated content. No overflow in
+  any of the 10 — the longest cover (`inspiring-women-who-changed-history`,
+  a 3-line headline + 3-line cover_body) and the longest closing (41-42
+  words, 5 wrapped lines) both left generous margin before the hero-image
+  slot / bottom of the canvas respectively. 8 real body-slide renders
+  (`carousel_body_teaching` with `accent_phrase`) checked for the punctuation
+  gap above, all clean after the fix.
+- **A known, pre-existing, separate gap noticed while touching
+  `editor/page.tsx`, not fixed here:** `SlideEditForm`'s `switch` has no
+  `case "carousel_body_teaching"` at all, so body slides (both legacy's
+  `heading`/`body` and direct-write's `body`/`accent_phrase`) have never
+  been editable in the swipe-editor, on either writer. Pre-dates this
+  change — confirmed by checking the switch statement, not assumed — and
+  is out of this task's scope (fixing it well means deciding how
+  `accent_phrase` should behave under edits, a real design question, not a
+  one-line addition like the `cover_body` field this task did add to the
+  cover's own edit form). Flagged here so it isn't rediscovered cold.
+- **The known cross-topic anchor-convergence gap (deviations table, row
+  43-46) recurred again in this trial batch, unprompted:**
+  `mindset-self-doubt` and `inspiring-women-who-changed-history` both
+  independently landed on the identical anchor ("Hedy Lamarr's
+  frequency-hopping patent") on two different, unrelated topics in the same
+  5-trial run. Not a new gap, not fixed here — additional real evidence for
+  an already-tracked, still-open one.
+
+Two new one-off scripts kept in the repo for reference, same practice as
+`backend/scripts/poc_writer.py`: `direct_write_schema_trial.py` (calls
+`draft_carousel_direct` directly against the real LLM for a fixed list of
+topics and prints/saves the structured output) and `render_trial_slides.py`
+(POSTs saved slide JSON to a locally-running `/api/render` for real PNGs).
+Neither is imported by, or wired into, the app itself.
+
+**Not a blueprint deviation beyond what logbook #43-46 already established**
+— this is a content-quality iteration on an already-flagged
+OPEN/EXPERIMENTAL feature, not a new departure from `blueprint.md`/
+`implementation-guide.md`. `single_image` and the legacy carousel chain are
+both completely untouched — confirmed by the full legacy-path test coverage
+passing unchanged and by every new field/range being additive-and-defaulted
+rather than replacing anything legacy reads or writes.
+
+---
+
+## 54. OPEN, EXPERIMENTAL — cover's bridge-line instruction hardened with the same requirement + self-check pattern as rule 1/rule 9; real-trial re-verification was blocked on both providers, then closed out at 2/2 once credits returned
+
+**Symptom:** #53's bridge-line instruction (cover_body should bridge the
+anchor to the reader's own life, except when the anchor is itself the whole
+subject of the post) held only 2 of 4 in that entry's real testing — a soft
+"add one explicit sentence" ask, not a checkable requirement. This is the
+exact same failure shape rule 1 and the body-distillation word floor
+(logbook #52) already went through before being hardened: a soft
+instruction doesn't hold, an explicit "before finalizing, check X; if not,
+add one now" self-check does.
+
+**Fix:** `_carousel_direct_cover_instruction()` (`generator.py`) rewritten to
+state the bridge line as an explicit requirement ("This is a requirement,
+not an optional nicety") followed by the same checkable self-check pattern
+already proven for rule 1 (docs/direct-write-poc.md Section 10) and the
+body-distillation floor (logbook #52): "Before finalizing cover_body,
+check: is the anchor itself the whole subject of this post, or does it
+illustrate something else? If it illustrates something else, does
+cover_body already contain a sentence connecting the anchor to the
+reader's own life? If it does not, add one now." Not a reword-to-sound-
+stronger change — the actual check step is new.
+
+**Verified so far:** full backend suite 143/143 (prompt-text-only change,
+no schema/parsing touched, so the count is unchanged from logbook #53).
+
+**First verification attempt was genuinely blocked, not skipped:**
+immediately after the code change, tried 6 fresh topics not used in #53's
+trial (`mindset-perfectionism`, `mindset-rest`, `career-pay-scale`,
+`career-perfectionism`, `wellness-burnout`, `wellness-sleep`) — the very
+first live call failed with `openai.RateLimitError: insufficient_quota`
+(429). Checked whether `provider="anthropic"` could stand in as a fallback
+for this verification alone — it also failed immediately,
+`anthropic.BadRequestError: "Your credit balance is too low."` Both
+providers were out of credits at that point, a real account/billing state,
+not a bug — the same category of blocker `docs/direct-write-poc.md`
+Section 8 already hit. No trial results were fabricated or estimated in
+place of real ones; asked whether to wait, top up credits, or log as
+blocked — logged as blocked per that instruction.
+
+**Closed out, on direct instruction to trim to 2 topics and report the
+real number honestly, whatever it was** (a new standing rule for this
+trial script going forward: 2 topics, not a larger batch). Credits had
+returned by this point (confirmed live before running anything). Re-ran
+`backend/scripts/direct_write_schema_trial.py` trimmed to exactly 2 fresh
+topics — `mindset-perfectionism` and `career-pay-scale`, neither used in
+#53's trial:
+
+- `mindset-perfectionism` (anchor: girls'-needlework samplers) —
+  cover_body: *"Girls once stitched samplers to prove patience,
+  discipline, and skill. That old lesson still echoes when one imperfect
+  sentence at work feels heavier than it should."* — explicit bridge
+  sentence present. **Fired.**
+- `career-pay-scale` (anchor: mad money) — cover_body: *"Mad money was
+  cash a woman kept for a way home. Pay ranges can work the same way
+  before a salary conversation begins."* — explicit bridge sentence
+  present. **Fired.**
+
+**Real result: 2/2**, up from 2/4 pre-fix. Reported plainly, not rounded
+up past what the sample supports: 2 topics is a small sample, deliberately
+smaller than #53's original 4-topic check (per the new 2-topic rule for
+this script), so "2/2" is real evidence the requirement-plus-self-check
+pattern is working the same way it already worked for rule 1 and the
+body-distillation floor, not a claim the bridge line is now guaranteed
+reliable at scale. `validation_errors: []` on both trials; both closings
+landed at 3 sentences in range; all 6 body slides' `accent_phrase` values
+were confirmed as real substrings of their own `body` text. Full backend
+suite still 143/143 throughout (no code changed between the blocked
+attempt and this run — only the trial script's own topic list, which isn't
+part of the app).
+
+**Not a blueprint deviation** — same classification as #53; this is a
+prompt-reliability fix for an already-tracked, already-open issue, not a
+new design decision.
+
+---
+
 ## Summary — deviations from the original design docs
 
 | # | Deviation | Why |
@@ -3609,3 +3871,4 @@ unaddressed mild-undershoot tendency"), not a new design decision.
 | 39 | **OPEN/EXPERIMENTAL, 8 review rounds in** — carousel's sampled approach pool restricted to `story`/`question_reflection` only, its system/critique prompts swapped to a connected micro-essay arc in place of the generic specificity/actionability/saveability checklist; CTA-flagging, truncation, and closing-declarative all hold cleanly; rounds 5–6 fixed reader-address/anchor/hedge issues; round 7 added a real `carousel_conversation` slide (first structural, not prompt-only, change) and fixed a render-time emoji glyph gap; round 8 raised body slides 1–2 → 3 (6 slides total now, fixed regardless of approach), removed the hardcoded "with you," from display, relocated the real `brand_kit`-driven follow-us/handle line from the closing slide to the conversation slide (the true last slide as of round 7), added anti-padding/split guidance (adapted from an audited pattern in another project) and a 10% word-budget tolerance, corrected same-round to be carousel-only (was briefly universal by mistake) and extended to `validator.py` so the app's own warning banner agrees with what the model is told | Creator feedback that carousel output felt fragmented, no single throughline; `single_image` deliberately untouched; all rounds implementation/local-verification only so far, none yet run through a real `/generate` call |
 | 40 | Production text generation (`LLMProvider`, all callers) defaults to `gpt-5.6-luna`/`gpt-5.5` (OpenAI) instead of the locked Claude Haiku 4.5/Sonnet 5 | Anthropic production credits ran out entirely, plus real A/B evidence gpt-5.5 matched/beat Sonnet 5 on anchor authenticity and voice discipline; Claude path fully preserved and reversible via `LLM_PROVIDER=anthropic`, no redeploy needed |
 | 43-46 | **OPEN/EXPERIMENTAL** — carousel direct-write port (single-call writer, no critique/refine, free anchor pick guided by category+seed_angles) now wired into `routes/generate.py` as the default (`CAROUSEL_WRITER=direct_write`) for carousel, replacing the legacy chain for that call; its hero image generation runs **sequentially after** the text call, not in parallel — a direct deviation from blueprint Section 15's "text and image generation run as independent parallel lanes off the same brief" design, for carousel direct-write specifically (the legacy chain and `single_image` are both unaffected and still run their lanes in parallel as originally specced). Cross-topic anchor-convergence (independent generations landing on the same anchor, e.g. `career-burnout`/`wellness-burnout` both choosing "canary in a coal mine") is a real, still-open, still-unfixed gap, reconfirmed in this now-production-wired code path, not just the isolated POC it was first found in (`backend/app/poc/FINDINGS.md` #1). Both the sequential-image tradeoff and the anchor-convergence gap now also apply to paste-link's own direct-write entry point (logbook #51), which reuses the same single-call, sequential-image design — not a second, separate deviation, the same one now confirmed at a second entry point | Real testing found direct-write's single call outperformed 8 rounds of patching the legacy checklist prompt (`docs/direct-write-poc.md` Section 5); sequential image generation is a structural consequence of the single-call design, not a choice — mood/visual_subject aren't known until the one writer call returns, unlike the legacy chain's cheap-tier pre-sample that knows them before the strong-tier draft even starts; reversible via `CAROUSEL_WRITER=legacy`, not a hard cutover; anchor-convergence has no fix yet on either path (POC or production-wired) |
+| 53 | **OPEN/EXPERIMENTAL** — carousel direct-write's cover is now `headline`+`cover_body` (was `headline_word`/`script_word`/`kicker`), body slides drop `heading` in favor of an in-line `accent_phrase` (an exact substring of that slide's `body`), and `closing_takeaway` is a real 2-4 sentence build (was a one-line echo of the caption's opening) instead of legacy's short-takeaway shape. `CoverSlide`/`BodyTeachingSlide` (shared render models with legacy) gained these as new optional, defaulted fields rather than having anything renamed/removed out from under legacy, which still uses the old shapes unchanged; `validator.py` gained a `carousel_writer`-gated word-range override (`_DIRECT_WRITE_WORD_RANGE_OVERRIDES`) so legacy's own, shorter cover/closing ranges are untouched. Bridge-line instruction (cover_body should bridge to the reader's life only when the anchor illustrates a separate theme) generated for the first time on 5 real trials: fired clearly on 2, correctly stayed silent on 1 (an anchor-IS-the-subject topic), soft/ambiguous on 2 — real but not yet reliably 5-for-5. Cross-topic anchor convergence (row 43-46) recurred again, unprompted, on 2 of the 5 trial topics | Explicit request to replace (not layer onto) the cover/body/closing instructions, since layering was exactly the checklist-accumulation failure mode direct-write was built to escape (see logbook #39's own diagnosis, `docs/direct-write-poc.md` Section 2); real render verification (not just word counts) also surfaced and fixed a genuine Satori rendering bug (a stray gap before punctuation glued directly onto `accent_phrase` with no source space) |

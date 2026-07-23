@@ -5,6 +5,7 @@ import pytest
 
 from app.engine.brief_builder import build_brief
 from app.engine.generator import (
+    _parse_carousel_direct_response,
     critique_post,
     draft_post,
     generate_post,
@@ -426,3 +427,75 @@ def test_body_slide_uses_old_fragment_schema_for_non_teaching_approach():
     post = draft_post(_non_teaching_brief(), WGS_BRAND_KIT, llm)
     assert len(post.slides) == 6
     assert post.slides[1].template_id == "carousel_body"
+
+
+# --- Task "#19": carousel direct-write cover/body/closing schema rewrite ---
+
+
+def _direct_write_raw_response(**overrides) -> str:
+    fields = {
+        "anchor": "a test anchor",
+        "mood": "wisdom",
+        "visual_subject": "a folded paper on a table",
+        "caption": "a caption",
+        "headline": "A Real Test Headline",
+        "cover_body": "Real cover body copy for a test.",
+        "body_1_text": "The first retold beat has a real accent word inside it.",
+        "body_1_accent_phrase": "real accent word",
+        "body_2_text": "The second retold beat also has a real accent word inside it.",
+        "body_2_accent_phrase": "real accent word",
+        "body_3_text": "The third retold beat has no matching substring for its own phrase.",
+        "body_3_accent_phrase": "not present anywhere",
+        "closing_takeaway": "A real closing. Across two real sentences.",
+        "conversation_question": "What would you tell a friend right now?",
+        "hashtags": ["#a"],
+    }
+    fields.update(overrides)
+    return json.dumps(fields)
+
+
+def test_parse_carousel_direct_response_cover_is_headline_and_cover_body_only():
+    """Cover schema (task '#19'): headline -> CoverSlide.headline_word (the
+    same 96px slot legacy's one-word headline used), cover_body -> a real new
+    field, script_word/kicker hardcoded empty -- not asked of the model on
+    this path at all."""
+    post, anchor, mood, visual_subject = _parse_carousel_direct_response(
+        _direct_write_raw_response(), WGS_BRAND_KIT
+    )
+    cover = post.slides[0]
+    assert isinstance(cover, CoverSlide)
+    assert cover.headline_word == "A Real Test Headline"
+    assert cover.cover_body == "Real cover body copy for a test."
+    assert cover.script_word == ""
+    assert cover.kicker == ""
+    assert anchor == "a test anchor"
+    assert mood == "wisdom"
+    assert visual_subject == "a folded paper on a table"
+
+
+def test_parse_carousel_direct_response_body_drops_heading_keeps_accent_phrase():
+    """Body schema (task '#19'): heading is dropped (hardcoded "" -- not asked
+    of the model), accent_phrase carries through as its own field, verbatim,
+    whether or not it actually turns out to be a real substring of body (that
+    check is the prompt's job and the frontend's rendering fallback -- see
+    CarouselBodyTeaching.tsx -- not this parsing step's)."""
+    post, *_ = _parse_carousel_direct_response(_direct_write_raw_response(), WGS_BRAND_KIT)
+    body_1, body_2, body_3 = post.slides[1], post.slides[2], post.slides[3]
+    assert isinstance(body_1, BodyTeachingSlide)
+    assert body_1.heading == ""
+    assert body_1.body == "The first retold beat has a real accent word inside it."
+    assert body_1.accent_phrase == "real accent word"
+    assert body_1.accent_phrase in body_1.body
+    assert body_3.accent_phrase == "not present anywhere"
+    assert body_3.accent_phrase not in body_3.body  # a real possibility, not assumed away
+
+
+def test_parse_carousel_direct_response_closing_is_the_raw_multi_sentence_field():
+    """Closing schema (task '#19'): closing_takeaway flows straight through as
+    ClosingSlide.takeaway, whatever length the model actually wrote -- no
+    truncation or reshaping happens in parsing; the word-range check is
+    validator.py's job (see test_validator.py's direct-write closing tests)."""
+    post, *_ = _parse_carousel_direct_response(_direct_write_raw_response(), WGS_BRAND_KIT)
+    closing = post.slides[4]
+    assert isinstance(closing, ClosingSlide)
+    assert closing.takeaway == "A real closing. Across two real sentences."

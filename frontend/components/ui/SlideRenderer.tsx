@@ -27,6 +27,7 @@ export default function SlideRenderer({ slide, masthead, tokens, heroImageUrl }:
           headline_word={slide.headline_word}
           script_word={slide.script_word}
           kicker={slide.kicker}
+          cover_body={slide.cover_body}
           hero_image_url={heroImageUrl ?? null}
         />
       );

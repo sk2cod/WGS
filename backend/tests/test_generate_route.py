@@ -104,30 +104,45 @@ class _FakeImage:
 
 
 def _direct_write_response_json(anchor: str) -> str:
-    """One real direct-write JSON response (logbook #43-46) -- word counts
-    sized inside carousel_body_teaching's real 35-50 range and
-    closing/conversation's real ranges, matching the actual writer's schema,
-    not the legacy chain's."""
+    """One real direct-write JSON response (logbook #43-46, task "#19" schema
+    rewrite) -- word counts sized inside carousel_body_teaching's real 35-50
+    range, the new direct-write-only cover/closing ranges
+    (_CAROUSEL_DIRECT_COVER_WORD_RANGE / _CAROUSEL_DIRECT_CLOSING_WORD_RANGE),
+    and conversation's real range, matching the actual writer's schema, not
+    the legacy chain's. body_accent_phrase is a real, exact substring of
+    body_text ("real words"), not a paraphrase -- exercising the same
+    substring contract the real writer is instructed to honor."""
     body_text = (
         "This is a full retold beat with enough real words to satisfy the "
         "teaching body role's much higher floor, since a carousel_body_teaching "
         "slide needs closer to two full sentences of real content."
+    )
+    body_accent_phrase = "real words"
+    cover_body = (
+        "This is a real two sentence cover body written for the test, long "
+        "enough to satisfy the new direct-write word range. It gives the "
+        "reader real curiosity before the swipe."
+    )
+    closing_takeaway = (
+        "Short body words alone were never going to look complete here. This "
+        "closing needs room to breathe, room enough for a real thought instead "
+        "of a single clipped line. That is exactly what this longer test "
+        "sentence is standing in for."
     )
     return json.dumps({
         "anchor": anchor,
         "mood": "wisdom",
         "visual_subject": "a folded paper on a wooden table",
         "caption": "a caption",
-        "headline_word": "PAUSE",
-        "script_word": "first.",
-        "kicker": "short kicker",
-        "body_1_heading": "A heading",
+        "headline": "A Real Test Headline Phrase",
+        "cover_body": cover_body,
         "body_1_text": body_text,
-        "body_2_heading": "A heading",
+        "body_1_accent_phrase": body_accent_phrase,
         "body_2_text": body_text,
-        "body_3_heading": "A heading",
+        "body_2_accent_phrase": body_accent_phrase,
         "body_3_text": body_text,
-        "closing_takeaway": "Short body words alone were never going to look complete here",
+        "body_3_accent_phrase": body_accent_phrase,
+        "closing_takeaway": closing_takeaway,
         "conversation_question": "What would you tell a friend who was standing exactly in your position right now?",
         "hashtags": ["#a", "#b"],
     })

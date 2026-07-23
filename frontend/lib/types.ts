@@ -60,10 +60,15 @@ export type TemplateId =
   | "single_quote"
   | "single_stat";
 
+/** headline_word/script_word/kicker are the legacy chain's own three-field
+ * shape, unchanged. cover_body is the carousel direct-write port's field
+ * (task "#19") -- direct-write leaves script_word/kicker "" and supplies
+ * cover_body instead; legacy leaves cover_body undefined/"". */
 export interface CarouselCoverContent {
   headline_word: string;
   script_word: string;
   kicker: string;
+  cover_body?: string;
   hero_image_url?: string | null;
 }
 
@@ -74,10 +79,15 @@ export interface CarouselBodyContent {
 }
 
 /** Room for 1-2 full sentences of actual teaching content — distinct from
- * CarouselBodyContent's single emphasis fragment, which can't hold real substance. */
+ * CarouselBodyContent's single emphasis fragment, which can't hold real substance.
+ * heading is the legacy chain's own field, unchanged. accent_phrase is the carousel
+ * direct-write port's field (task "#19") -- direct-write leaves heading "" and
+ * supplies accent_phrase (an exact substring of body, rendered emphasized in-line)
+ * instead; legacy leaves accent_phrase undefined/"". */
 export interface CarouselBodyTeachingContent {
   heading: string;
   body: string;
+  accent_phrase?: string;
 }
 
 /** cta/handle moved to CarouselConversationContent in logbook #39 round 8 —

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.engine.generator import (
+    _DIRECT_WRITE_WORD_RANGE_OVERRIDES,
     _SINGLE_STAT_NUMBER_WORD_RANGE,
     _SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE,
     _WORD_RANGE_FOR_ROLE,
@@ -42,7 +43,26 @@ def _check_forbidden(brand_kit: BrandKit, post: GeneratedPost) -> list[str]:
     return errors
 
 
-def _check_slide_word_range(brief: ContentBrief, role: str, index: int, slide) -> list[str]:
+def _range_for_role(role: str, carousel_writer: str) -> tuple[int, int] | None:
+    """Which (min, max) word range governs a role -- almost always
+    _WORD_RANGE_FOR_ROLE, except carousel_cover and carousel_closing on the
+    carousel direct-write path (task "#19"), which get their own, wider
+    ranges (_DIRECT_WRITE_WORD_RANGE_OVERRIDES) instead. Both templates are
+    shared render components with the legacy chain, which still produces a
+    one-word headline_word + one-line kicker (cover) and a one-line takeaway
+    (closing) -- gating this on carousel_writer, not just the role, is what
+    keeps legacy's own shorter shapes validated against their original,
+    unchanged ranges."""
+    if carousel_writer == "direct_write":
+        override = _DIRECT_WRITE_WORD_RANGE_OVERRIDES.get(role)
+        if override is not None:
+            return override
+    return _WORD_RANGE_FOR_ROLE.get(role)
+
+
+def _check_slide_word_range(
+    brief: ContentBrief, role: str, index: int, slide, carousel_writer: str
+) -> list[str]:
     """Per-template (min, max) ranges replacing the old flat max_words_per_slide
     cap for the roles found to need one via real Satori renders (docs/logbook.md)
     -- carousel_body, carousel_body_teaching, carousel_closing, and
@@ -50,9 +70,10 @@ def _check_slide_word_range(brief: ContentBrief, role: str, index: int, slide) -
     (both ends) as _tolerant_word_cap already used carousel-only. Roles absent
     from _WORD_RANGE_FOR_ROLE (carousel_cover, single_quote) keep the original
     flat brief.max_words_per_slide cap, unchanged -- no problem was found for
-    either. single_stat is checked separately below, field by field, not folded
-    into this combined-text check."""
-    range_ = _WORD_RANGE_FOR_ROLE.get(role)
+    either -- except carousel_cover on the direct-write path, which now has its
+    own range too (see _range_for_role). single_stat is checked separately
+    below, field by field, not folded into this combined-text check."""
+    range_ = _range_for_role(role, carousel_writer)
     if range_ is not None:
         min_words, max_words = _tolerant_word_range(*range_) if brief.format == Format.CAROUSEL else range_
         word_count = len(slide_text(slide).split())
@@ -112,21 +133,23 @@ def _check_single_stat_fields(index: int, slide: StatSlide) -> list[str]:
     return errors
 
 
-def _check_format(brief: ContentBrief, post: GeneratedPost) -> list[str]:
+def _check_format(brief: ContentBrief, post: GeneratedPost, carousel_writer: str) -> list[str]:
     """logbook #39, round 8: carousel's word cap allows the same 10% tolerance
     the model is actually told about (system prompt + critique) -- without
     this, a slide the model believed was compliant could still trip the app's
     "Needs a look" banner, the visible warning and the model's real
     instruction disagreeing. Per-template ranges (added on top of that same
     tolerance philosophy) replace the single flat cap for the roles real
-    Satori renders found needed one -- see _check_slide_word_range."""
+    Satori renders found needed one -- see _check_slide_word_range.
+    carousel_writer (task "#19") selects which cover/closing range applies --
+    see _range_for_role."""
     errors = []
     if len(post.slides) != brief.slide_count:
         errors.append(f"expected {brief.slide_count} slide(s), got {len(post.slides)}")
 
     roles = slide_roles_for(brief)
     for i, (role, slide) in enumerate(zip(roles, post.slides), start=1):
-        errors.extend(_check_slide_word_range(brief, role, i, slide))
+        errors.extend(_check_slide_word_range(brief, role, i, slide, carousel_writer))
     return errors
 
 
@@ -158,10 +181,14 @@ def validate_post(
     post: GeneratedPost,
     memory: list[MemoryRecord],
     fingerprint: str,
+    carousel_writer: str = "legacy",
 ) -> ValidationResult:
+    """carousel_writer defaults to "legacy" so every existing caller (and every
+    existing test) is unaffected -- only the two carousel direct-write call
+    sites in routes/generate.py pass "direct_write" explicitly (task "#19")."""
     errors = [
         *_check_forbidden(brand_kit, post),
-        *_check_format(brief, post),
+        *_check_format(brief, post, carousel_writer),
         *_check_citation(brief),
         *_check_repetition(memory, fingerprint),
     ]

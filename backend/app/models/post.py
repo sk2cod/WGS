@@ -20,10 +20,17 @@ SlideRole = Literal[
 
 
 class CoverSlide(BaseModel):
+    # headline_word/script_word/kicker are the legacy chain's own three-field
+    # cover shape, unchanged. cover_body is the carousel direct-write port's
+    # field (task "#19"), added on top rather than replacing anything here,
+    # since this model is shared with legacy (generator.py::_build_slide) --
+    # direct-write hardcodes script_word/kicker to "" and headline_word holds
+    # its own (possibly multi-word) headline; legacy leaves cover_body "".
     template_id: Literal["carousel_cover"] = "carousel_cover"
-    headline_word: str    # one bold structural word, e.g. "PAUSE"
-    script_word: str      # one short script-accent phrase, e.g. "first."
-    kicker: str            # one supporting line
+    headline_word: str    # one bold structural word (legacy) or a short headline phrase (direct-write) -- same 96px slot
+    script_word: str      # legacy: one short script-accent phrase, e.g. "first.". Direct-write: always ""
+    kicker: str            # legacy: one supporting line. Direct-write: always "" -- cover_body is this path's supporting copy
+    cover_body: str = ""   # direct-write only: 1-2 real sentences of curiosity-building cover copy. Always "" for legacy
 
 
 class BodySlide(BaseModel):
@@ -35,11 +42,19 @@ class BodySlide(BaseModel):
 
 class BodyTeachingSlide(BaseModel):
     """Room for 1-2 full sentences of actual teaching content — distinct from
-    BodySlide's single emphasis fragment, which can't hold real substance."""
+    BodySlide's single emphasis fragment, which can't hold real substance.
+
+    heading/body are the legacy chain's own two-field shape, unchanged.
+    accent_phrase is the carousel direct-write port's field (task "#19"),
+    added on top rather than replacing anything here, since this model is
+    shared with legacy (generator.py::_build_slide) -- direct-write hardcodes
+    heading to "" and supplies accent_phrase (an exact substring of body, for
+    in-line emphasis); legacy leaves accent_phrase ""."""
 
     template_id: Literal["carousel_body_teaching"] = "carousel_body_teaching"
-    heading: str    # a short lead-in label or phrase
-    body: str        # 1-2 full sentences of the actual teaching content
+    heading: str    # legacy: a short lead-in label or phrase. Direct-write: always ""
+    body: str        # the actual teaching content / retold beat
+    accent_phrase: str = ""  # direct-write only: exact substring of body to render emphasized. Always "" for legacy
 
 
 class ClosingSlide(BaseModel):

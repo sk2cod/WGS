@@ -106,6 +106,27 @@ _WORD_RANGE_FOR_ROLE: dict[str, tuple[int, int]] = {
 _SINGLE_STAT_NUMBER_WORD_RANGE = (1, 3)
 _SINGLE_STAT_SUPPORTING_LINE_WORD_RANGE = (15, 20)
 
+# Carousel direct-write only (draft_carousel_direct / draft_carousel_direct_from_source,
+# task "#19" -- rewriting the direct-write cover/body/closing prompt and schema).
+# carousel_cover and carousel_closing are shared render templates with the legacy
+# chain, which still produces a one-word headline_word + a one-line kicker (cover)
+# and a one-line takeaway (closing) -- _WORD_RANGE_FOR_ROLE's absence of a cover
+# entry and its (10, 20) closing entry are still exactly right for legacy and are
+# left untouched. These two ranges apply only when validate_post() is told
+# carousel_writer="direct_write" (see validator.py's _range_for_role), for
+# direct-write's real cover paragraph and real 2-4 sentence closing -- neither of
+# which existed when the shared ranges above were sized. Initial estimates below,
+# not yet load-bearing on a large real sample -- revisit if real trials show a
+# consistent floor/ceiling miss, the same way _WORD_RANGE_FOR_ROLE itself was
+# tuned against real renders.
+_CAROUSEL_DIRECT_COVER_WORD_RANGE = (20, 45)
+_CAROUSEL_DIRECT_CLOSING_WORD_RANGE = (24, 55)
+
+_DIRECT_WRITE_WORD_RANGE_OVERRIDES: dict[str, tuple[int, int]] = {
+    "carousel_cover": _CAROUSEL_DIRECT_COVER_WORD_RANGE,
+    "carousel_closing": _CAROUSEL_DIRECT_CLOSING_WORD_RANGE,
+}
+
 
 def _tolerant_word_range(min_words: int, max_words: int) -> tuple[int, int]:
     """Same 10%-buffer philosophy as _tolerant_word_cap (logbook #39 round 8),
@@ -422,7 +443,7 @@ def slide_text(slide: Slide) -> str:
     carousel_closing's signature and carousel_conversation's label/invite/cta/handle
     are brand-fixed, not generated, so they're excluded here."""
     if isinstance(slide, CoverSlide):
-        return f"{slide.headline_word} {slide.script_word} {slide.kicker}"
+        return f"{slide.headline_word} {slide.script_word} {slide.kicker} {slide.cover_body}"
     if isinstance(slide, BodySlide):
         return f"{slide.statement_pre} {slide.statement_script} {slide.statement_post}"
     if isinstance(slide, BodyTeachingSlide):
@@ -1024,10 +1045,9 @@ never an abstract noun (comfort, love, guilt, the feeling) performing an
 action on its own. If you can't draw the sentence, rewrite it.
 
 7. Close the caption by echoing something from the opening — a phrase, an
-image, a detail — quietly returned to, not a new thought introduced. The
-closing_takeaway field (see below) should do the same at the level of one
-line: a plain declarative echo, never a literal question, even when the
-piece's own arc turned on one earlier.
+image, a detail — quietly returned to, not a new thought introduced. (The
+closing_takeaway field has its own separate instruction, below — unlike the
+caption's own ending, it is not asked to echo the opening.)
 
 8. Never give an instruction or command to the reader. The reader arrives at
 the meaning themselves.
@@ -1190,6 +1210,12 @@ def _carousel_direct_body_distillation_instruction() -> str:
     # padding/repetition to hit a number would trade one failure mode for
     # another already ruled out elsewhere in this prompt (rule 9's
     # restatement check).
+    #
+    # Task "#19": the heading field is dropped entirely (replaced by
+    # accent_phrase, an in-line emphasis rather than a separate label line --
+    # see CarouselBodyTeaching.tsx), and the beat-distinctness requirement is
+    # restated here explicitly for the body slides specifically, not left to
+    # only be implied by rule 9's caption-level version.
     lo, hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_body_teaching"])
     return (
         "After the caption is complete, select 3 of its real beats — in order, "
@@ -1197,26 +1223,86 @@ def _carousel_direct_body_distillation_instruction() -> str:
         "opening — and retell each one fresh for its own slide: same moment, "
         "same image, same idea, in a different sentence. A reader may see both "
         "the slides and the caption on the same post, so a slide must never "
-        "reuse the caption's own sentence almost word for word. Each slide "
-        "also needs a heading: a short phrase, a few words, naming what the "
-        "beat is about in plain, concrete terms — not a teaching-style label, "
-        "not a restatement of the sentence that follows it, just enough to "
-        f"give the slide its own lead-in. Target {lo}-{hi} words combined "
-        "across the heading and the retold beat. Before finalizing each body "
-        "slide, count its heading and retold beat together. If the count is "
-        f"under {lo}, the beat is underdeveloped, not just concise — expand it "
-        "with one more concrete sensory or narrative detail actually from that "
-        "moment (what was seen, said, felt, or done) until it clears the floor, "
-        "rather than padding with a restated idea or a generic elaboration."
+        "reuse the caption's own sentence almost word for word. Write each "
+        "slide as flowing, editorial prose — full, complete sentences in the "
+        "same register as the caption itself, never a clipped statement or a "
+        "compressed fragment. Each of the 3 slides must be its own distinct "
+        "beat doing a genuinely different job than the other two (the same "
+        "distinctness rule 9 requires of the caption's own beats applies here "
+        "too) — never a reworded repeat of another slide's point.\n"
+        "Each slide also needs an accent_phrase: the single word or short "
+        "phrase within that slide's own retold beat that matters most, copied "
+        "verbatim from the body text you just wrote for that slide. It must be "
+        "an exact, findable substring of that same slide's body — never a "
+        "paraphrase, never borrowed from a different slide, and never more "
+        f"than one accent_phrase per slide. Target {lo}-{hi} words for the "
+        "retold beat itself. Before finalizing each body slide, count its "
+        f"words. If the count is under {lo}, the beat is underdeveloped, not "
+        "just concise — expand it with one more concrete sensory or narrative "
+        "detail actually from that moment (what was seen, said, felt, or done) "
+        "until it clears the floor, rather than padding with a restated idea "
+        "or a generic elaboration."
     )
 
 
 def _carousel_direct_cover_instruction() -> str:
+    # Task "#19": replaces the old headline_word/script_word/kicker three-field
+    # cover with exactly two fields, headline and cover_body -- _KICKER_INSTRUCTION
+    # (the legacy chain's own cover instruction, unchanged) no longer applies here
+    # at all, deliberately not folded in alongside this.
+    #
+    # Task "#20": the bridge-line sentence held only 2/4 in #19's real testing --
+    # stating it as a soft "add one explicit sentence" instruction wasn't enough,
+    # the same failure mode rule 1 and rule 9/the body-distillation floor already
+    # went through before they were hardened into an explicit self-check. Applying
+    # the identical proven pattern here: state the requirement, then a checkable
+    # "before finalizing, check X; if not, add one now" step, rather than just
+    # rewording the ask to sound stronger.
+    lo, hi = _tolerant_word_range(*_CAROUSEL_DIRECT_COVER_WORD_RANGE)
     return (
-        "Also write the cover: headline_word is one bold structural word or short "
-        "phrase drawn from the anchor or its central image (not the topic name "
-        "itself). script_word is one short script-accent phrase. "
-        f"{_KICKER_INSTRUCTION}"
+        "Also write the cover — exactly two fields, headline and cover_body:\n"
+        "headline: a short phrase (not one isolated word) drawn from the "
+        "anchor or its central image — never the topic name itself, never a "
+        "label.\n"
+        "cover_body: 1-2 real sentences that make a reader want to keep "
+        "swiping. If the anchor names a real person, place, tradition, or "
+        "thing she might not already recognize, plainly spell out what "
+        "category it belongs to (a country, a craft, a historical era, a "
+        "field of study) — never assume she already knows what it is. Create "
+        "curiosity by withholding what the anchor MEANS or why it matters, "
+        "never by withholding basic facts about what it plainly is.\n"
+        "When the anchor illustrates a separate, real-life theme rather than "
+        "being the subject in its own right — true for almost every topic "
+        "except a post that is directly about the anchor itself (e.g. a real "
+        "historical figure's own story) — cover_body MUST include one "
+        "explicit sentence bridging the anchor to the reader's own life. This "
+        "is a requirement, not an optional nicety. Before finalizing "
+        "cover_body, check: is the anchor itself the whole subject of this "
+        "post, or does it illustrate something else? If it illustrates "
+        "something else, does cover_body already contain a sentence "
+        "connecting the anchor to the reader's own life? If it does not, add "
+        "one now — do not leave cover_body as pure anchor-only curiosity when "
+        "a bridge is required. Only skip the bridge line when the anchor "
+        "genuinely is the whole subject of the post; forcing one in there "
+        "would be a restatement, not a bridge.\n"
+        f"Target {lo}-{hi} words combined across headline and cover_body."
+    )
+
+
+def _carousel_direct_closing_instruction() -> str:
+    # Task "#19": replaces the old "closing_takeaway: one declarative line ...
+    # see rule 7" constraint -- rule 7 no longer governs this field at all (see
+    # the edit to _CAROUSEL_DIRECT_RULES_3_TO_12 above). closing_takeaway is a
+    # real 2-4 sentence build now, not a one-line echo of the opening.
+    lo, hi = _tolerant_word_range(*_CAROUSEL_DIRECT_CLOSING_WORD_RANGE)
+    return (
+        f"closing_takeaway: a real closing, {lo}-{hi} words across 2 to 4 full "
+        "sentences — not one clipped line. Its job is to leave the reader with "
+        "a new feeling, one the piece has earned but hasn't already stated "
+        "outright — never a restatement of a body slide's image or detail, "
+        "and never phrased as a question. Write it in plain, direct language; "
+        "this is the moment for the piece's plainest sentences, not a place "
+        "for wordplay or a clever turn for its own sake."
     )
 
 
@@ -1254,7 +1340,6 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
     banned_phrases = ", ".join(f'"{p}"' for p in _CAROUSEL_DIRECT_BANNED_PHRASES)
     citation_block = _citation_instruction_block(brief)
 
-    closing_lo, closing_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_closing"])
     conv_lo, conv_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_conversation"])
 
     return (
@@ -1283,8 +1368,7 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
         "describes built into its own sentences.\n\n"
         f"{_carousel_direct_body_distillation_instruction()}\n\n"
         f"{_carousel_direct_cover_instruction()}\n\n"
-        f"closing_takeaway: one declarative line, {closing_lo}-{closing_hi} words — "
-        "see rule 7.\n\n"
+        f"{_carousel_direct_closing_instruction()}\n\n"
         f"conversation_question: one genuine, open, unresolved question tied "
         f"directly to this anchor, {conv_lo}-{conv_hi} words, for the reader to "
         "sit with.\n\n"
@@ -1299,11 +1383,11 @@ def _carousel_direct_system_prompt(brief: ContentBrief, brand_kit: BrandKit, top
         'to the anchor>",\n'
         '  "caption": "<the full piece, written first, start to finish, in '
         'flowing prose>",\n'
-        '  "headline_word": "...", "script_word": "...", "kicker": "...",\n'
-        '  "body_1_heading": "...", "body_1_text": "...",\n'
-        '  "body_2_heading": "...", "body_2_text": "...",\n'
-        '  "body_3_heading": "...", "body_3_text": "...",\n'
-        f'  "closing_takeaway": "<{closing_lo}-{closing_hi} words>",\n'
+        '  "headline": "...", "cover_body": "...",\n'
+        '  "body_1_text": "...", "body_1_accent_phrase": "...",\n'
+        '  "body_2_text": "...", "body_2_accent_phrase": "...",\n'
+        '  "body_3_text": "...", "body_3_accent_phrase": "...",\n'
+        '  "closing_takeaway": "<2-4 sentences>",\n'
         '  "conversation_question": "...",\n'
         '  "hashtags": ["...", ...]\n'
         "}\n\n"
@@ -1324,23 +1408,34 @@ def _parse_carousel_direct_response(raw: str, brand_kit: BrandKit) -> tuple[Gene
     # generate_angle()'s _parse_angle_response uses (fallback_visual_subject).
     visual_subject = str(data.get("visual_subject") or "").strip() or anchor
 
+    # Task "#19": two cover fields (headline, cover_body) replace the old
+    # three (headline_word, script_word, kicker) -- script_word/kicker are
+    # hardcoded empty here, not dropped from CoverSlide itself, since that
+    # Pydantic model (and CarouselCover.tsx) is shared with the legacy chain,
+    # which still asks the model for all three. Same reasoning for
+    # BodyTeachingSlide.heading below: dropped from THIS path's own prompt/
+    # parsing, not from the shared model, since legacy still supplies it.
     raw_slides = [
         {
-            "headline_word": data.get("headline_word", ""),
-            "script_word": data.get("script_word", ""),
-            "kicker": data.get("kicker", ""),
+            "headline_word": data.get("headline", ""),
+            "script_word": "",
+            "kicker": "",
+            "cover_body": data.get("cover_body", ""),
         },
         {
-            "heading": data.get("body_1_heading", ""),
+            "heading": "",
             "body": data.get("body_1_text", ""),
+            "accent_phrase": data.get("body_1_accent_phrase", ""),
         },
         {
-            "heading": data.get("body_2_heading", ""),
+            "heading": "",
             "body": data.get("body_2_text", ""),
+            "accent_phrase": data.get("body_2_accent_phrase", ""),
         },
         {
-            "heading": data.get("body_3_heading", ""),
+            "heading": "",
             "body": data.get("body_3_text", ""),
+            "accent_phrase": data.get("body_3_accent_phrase", ""),
         },
         {"takeaway": data.get("closing_takeaway", "")},
         {"question": data.get("conversation_question", "")},
@@ -1438,7 +1533,6 @@ def _carousel_direct_paste_link_system_prompt(brief: ContentBrief, brand_kit: Br
     banned_phrases = ", ".join(f'"{p}"' for p in _CAROUSEL_DIRECT_BANNED_PHRASES)
     citation_block = _citation_instruction_block(brief)
 
-    closing_lo, closing_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_closing"])
     conv_lo, conv_hi = _tolerant_word_range(*_WORD_RANGE_FOR_ROLE["carousel_conversation"])
 
     return (
@@ -1471,8 +1565,7 @@ def _carousel_direct_paste_link_system_prompt(brief: ContentBrief, brand_kit: Br
         "describes built into its own sentences.\n\n"
         f"{_carousel_direct_body_distillation_instruction()}\n\n"
         f"{_carousel_direct_cover_instruction()}\n\n"
-        f"closing_takeaway: one declarative line, {closing_lo}-{closing_hi} words — "
-        "see rule 7.\n\n"
+        f"{_carousel_direct_closing_instruction()}\n\n"
         f"conversation_question: one genuine, open, unresolved question tied "
         f"directly to this anchor, {conv_lo}-{conv_hi} words, for the reader to "
         "sit with.\n\n"
@@ -1487,11 +1580,11 @@ def _carousel_direct_paste_link_system_prompt(brief: ContentBrief, brand_kit: Br
         'to the anchor>",\n'
         '  "caption": "<the full piece, written first, start to finish, in '
         'flowing prose>",\n'
-        '  "headline_word": "...", "script_word": "...", "kicker": "...",\n'
-        '  "body_1_heading": "...", "body_1_text": "...",\n'
-        '  "body_2_heading": "...", "body_2_text": "...",\n'
-        '  "body_3_heading": "...", "body_3_text": "...",\n'
-        f'  "closing_takeaway": "<{closing_lo}-{closing_hi} words>",\n'
+        '  "headline": "...", "cover_body": "...",\n'
+        '  "body_1_text": "...", "body_1_accent_phrase": "...",\n'
+        '  "body_2_text": "...", "body_2_accent_phrase": "...",\n'
+        '  "body_3_text": "...", "body_3_accent_phrase": "...",\n'
+        '  "closing_takeaway": "<2-4 sentences>",\n'
         '  "conversation_question": "...",\n'
         '  "hashtags": ["...", ...]\n'
         "}\n"

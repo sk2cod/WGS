@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
           headline_word={c.headline_word}
           script_word={c.script_word}
           kicker={c.kicker}
+          cover_body={c.cover_body}
           hero_image_url={c.hero_image_url ?? hero_image_url ?? null}
         />
       );
